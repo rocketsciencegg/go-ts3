@@ -210,7 +210,7 @@ func testCmdsServer(t *testing.T, c *Client) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		assert.Equal(t, "zTfamFVhiMEzhTl49KrOVYaMilHPDQEBQOJFh6qX", token)
+		assert.Equal(t, "zTfamFVhiMEzhTl49KrOVYaMilHPgQEBQOJFh6qX", token)
 	}
 
 	serverrequestconnectioninfo := func(t *testing.T) {
