@@ -48,6 +48,10 @@ Documentation
 -------------
 - [GoDoc API Reference](http://godoc.org/github.com/multiplay/go-ts3).
 
+Testing
+-------
+CI tests Go 1.27 on Ubuntu, macOS, and Windows.
+
 License
 -------
 go-ts3 is available under the [BSD 2-Clause License](https://opensource.org/licenses/BSD-2-Clause).
