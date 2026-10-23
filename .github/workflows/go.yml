@@ -14,8 +14,8 @@ jobs:
   go:
     strategy:
       matrix:
-        go: [1.19]
-        golangcli: [v1.50.1]
+        go: [1.26]
+        golangci: [v2.15.0]
         os: [ubuntu-latest, macos-latest, windows-latest]
     name: lint
     runs-on: ${{ matrix.os }}
@@ -52,20 +52,16 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: ${{ matrix.golangci }}
-          args: "--out-${NO_FUTURE}format colored-line-number"
-          skip-pkg-cache: true
-          skip-build-cache: true
+          args: "--output.text.colors"
+          skip-cache: true
 
       - name: Go Lint Windows
         if: runner.os == 'Windows'
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        env:
-          outformat: out-format
         with:
           version: ${{ matrix.golangci }}
-          args: "--%outformat% colored-line-number --timeout 2m"
-          skip-pkg-cache: true
-          skip-build-cache: true
+          args: "--output.text.colors --timeout 2m"
+          skip-cache: true
 
       - name: Go Build
         run: go build ./...

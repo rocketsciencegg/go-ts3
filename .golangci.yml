@@ -1,39 +1,50 @@
+version: "2"
 linters:
   enable:
-    - errcheck
-    - ineffassign
-    - unused
-    - typecheck
     - bodyclose
     - depguard
     - dogsled
     - dupl
+    - dupword
+    - errorlint
     - gochecknoinits
+    - gocognit
     - goconst
     - gocritic
     - gocyclo
-    - gofmt
-    - goimports
-    - revive
+    - godot
     - gosec
-    - gosimple
     - misspell
     - nakedret
-    - prealloc
-    - staticcheck
-    - stylecheck
-    - unconvert
-    - unparam
-    - unused
-    - whitespace
-    - govet
-    - gocognit
-    - dupword
-    - errorlint
-    - godot
-    - gofumpt
     - nolintlint
     - nosprintfhostport
-    - tenv
+    - prealloc
+    - revive
+    - staticcheck
     - thelper
+    - unconvert
+    - unparam
+    - whitespace
     - wrapcheck
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
