@@ -26,6 +26,15 @@ linters:
     - unparam
     - whitespace
     - wrapcheck
+  settings:
+    depguard:
+      rules:
+        main:
+          allow:
+            - $gostd
+            - github.com/mitchellh/mapstructure
+            - github.com/stretchr/testify
+            - golang.org/x/crypto
   exclusions:
     generated: lax
     presets:
