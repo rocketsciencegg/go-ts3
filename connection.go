@@ -23,21 +23,24 @@ const (
 
 // writeTimeoutConn refreshes deadlines even for SSH window adjustments during reads.
 type writeTimeoutConn struct {
-	net.Conn
 	timeout time.Duration
+
+	net.Conn
 }
 
 func (c *writeTimeoutConn) Write(p []byte) (int, error) {
-	var deadline time.Time
+	var (
+		deadline time.Time
+	)
 	if c.timeout != 0 {
 		deadline = time.Now().Add(c.timeout)
 	}
 	if err := c.Conn.SetWriteDeadline(deadline); err != nil {
-		return 0, fmt.Errorf("write timeout connection: set write deadline: %w", err)
+		return 0, fmt.Errorf("set write deadline: %w", err)
 	}
 	n, err := c.Conn.Write(p)
 	if err != nil {
-		return n, fmt.Errorf("write timeout connection: write: %w", err)
+		return n, fmt.Errorf("write: %w", err)
 	}
 	return n, nil
 }
