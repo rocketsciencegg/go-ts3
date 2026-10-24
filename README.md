@@ -48,11 +48,6 @@ Documentation
 -------------
 - [GoDoc API Reference](http://godoc.org/github.com/multiplay/go-ts3).
 
-Releases
---------
-Create releases manually from the GitHub Releases page using a version tag.
-This package is a library and does not publish command-line binaries.
-
 License
 -------
 go-ts3 is available under the [BSD 2-Clause License](https://opensource.org/licenses/BSD-2-Clause).
