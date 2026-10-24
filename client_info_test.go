@@ -20,11 +20,14 @@ func TestServerMethods_ClientInfo(t *testing.T) {
 		testClientInfo(t, true)
 	})
 	t.Run("not-connected", func(t *testing.T) {
-		done := make(chan struct{})
-		close(done)
-		s := &ServerMethods{Client: &Client{done: done}}
+		s := newServer(t)
+		defer func() { require.NoError(t, s.Close()) }()
 
-		got, err := s.ClientInfo(8)
+		c, err := NewClient(s.Addr, Timeout(2*time.Second))
+		require.NoError(t, err)
+		require.NoError(t, c.Close())
+
+		got, err := c.Server.ClientInfo(8)
 		require.ErrorIs(t, err, ErrNotConnected)
 		require.ErrorContains(t, err, "clientinfo:")
 		require.Nil(t, got)
