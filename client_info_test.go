@@ -63,15 +63,20 @@ func TestClientInfo(t *testing.T) {
 		},
 		{
 			name:     "nonzero counters and flags",
-			response: `client_type=1 client_away=1 client_away_message=Away client_default_token=token client_description=Description client_login_name=admin client_security_hash=hash client_talk_request_msg=Please client_input_muted=1 client_output_muted=1 client_outputonly_muted=1 client_is_recording=1 client_is_talker=1 client_talk_request=1 client_month_bytes_downloaded=11 client_month_bytes_uploaded=12 client_total_bytes_downloaded=13 client_total_bytes_uploaded=14 connection_filetransfer_bandwidth_sent=15 connection_filetransfer_bandwidth_received=16 client_icon_id=-123456`,
+			response: `client_type=1 client_away=1 client_away_message=Away client_default_token=token client_description=Description client_login_name=admin client_security_hash=hash client_talk_request_msg=Please client_input_muted=1 client_output_muted=1 client_outputonly_muted=1 client_is_recording=1 client_is_talker=1 client_talk_request=1700000000 client_month_bytes_downloaded=11 client_month_bytes_uploaded=12 client_total_bytes_downloaded=13 client_total_bytes_uploaded=14 connection_filetransfer_bandwidth_sent=15 connection_filetransfer_bandwidth_received=16 client_icon_id=-1294967296`,
 			want: &DetailedOnlineClient{
 				ID: 8, Type: 1, Away: true, AwayMessage: "Away", DefaultToken: "token",
 				Description: "Description", LoginName: "admin", SecurityHash: "hash", TalkRequestMsg: "Please",
 				InputMuted: true, OutputMuted: true, OutputOnlyMuted: true, IsRecording: true,
-				IsTalker: true, TalkRequest: true, IconID: -123456,
+				IsTalker: true, TalkRequest: time.Unix(1700000000, 0), IconID: 3000000000,
 				MonthBytesDownloaded: 11, MonthBytesUploaded: 12, TotalBytesDownloaded: 13, TotalBytesUploaded: 14,
 				ConnectionFiletransferBandwidthSent: 15, ConnectionFiletransferBandwidthReceived: 16,
 			},
+		},
+		{
+			name:     "unsigned icon and no talk request",
+			response: `client_icon_id=3000000000 client_talk_request=0`,
+			want:     &DetailedOnlineClient{ID: 8, IconID: 3000000000},
 		},
 		{
 			name:     "single group and comma text",
@@ -92,6 +97,8 @@ func TestClientInfo(t *testing.T) {
 		{name: "missing optional fields", response: `client_nickname=Query`, want: &DetailedOnlineClient{ID: 8, Nickname: "Query"}},
 		{name: "invalid groups", response: `client_servergroups=6,no`, wantErr: "decode server group"},
 		{name: "invalid timestamp", response: `client_created=invalid`, wantErr: "invalid time"},
+		{name: "invalid talk request", response: `client_talk_request=invalid`, wantErr: "client_talk_request"},
+		{name: "negative talk request", response: `client_talk_request=-1`, wantErr: "client_talk_request timestamp out of range"},
 		{name: "invalid duration", response: `client_idle_time=invalid`, wantErr: "client_idle_time"},
 		{name: "idle overflow", response: `client_idle_time=9223372036855`, wantErr: "client_idle_time milliseconds out of range"},
 		{name: "connected overflow", response: `connection_connected_time=9223372036855`, wantErr: "connection_connected_time milliseconds out of range"},
