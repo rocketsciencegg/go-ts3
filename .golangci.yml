@@ -38,24 +38,11 @@ linters:
             - github.com/stretchr/testify
             - golang.org/x/crypto
   exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
+    generated: strict
 formatters:
   enable:
     - gofmt
     - gofumpt
     - goimports
   exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
+    generated: strict

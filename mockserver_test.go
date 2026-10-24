@@ -2,6 +2,7 @@ package ts3
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -295,7 +296,9 @@ func (s *server) closeConn(conn net.Conn) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	conn.Close()
+	if err := conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) && !s.closed {
+		s.err = err
+	}
 	delete(s.conns, conn)
 }
 
