@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCmdsServer(t *testing.T) {
@@ -207,10 +208,8 @@ func testCmdsServer(t *testing.T, c *Client) {
 	privilegekeyadd := func(t *testing.T) {
 		t.Helper()
 		token, err := c.Server.PrivilegeKeyAdd(0, 17395, 0)
-		if !assert.NoError(t, err) {
-			return
-		}
-		assert.Equal(t, "zTfamFVhiMEzhTl49KrOVYaMilHPgQEBQOJFh6qX", token)
+		require.NoError(t, err)
+		require.Equal(t, "zTfamFVhiMEzhTl49KrOVYaMilHPgQEBQOJFh6qX", token)
 	}
 
 	serverrequestconnectioninfo := func(t *testing.T) {
