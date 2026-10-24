@@ -16,7 +16,8 @@ type DetailedOnlineClient struct {
 	Away        bool   `ms:"client_away"`
 	AwayMessage string `ms:"client_away_message"`
 
-	Created       time.Time `ms:"client_created"`
+	Created time.Time `ms:"client_created"`
+	// LastConnected may report the last disconnect time on some servers.
 	LastConnected time.Time `ms:"client_lastconnected"`
 	// TalkRequest is zero when the client has not requested permission to talk.
 	TalkRequest time.Time `ms:"-"`
@@ -69,7 +70,8 @@ type DetailedOnlineClient struct {
 	OutputHardware                             bool   `ms:"client_output_hardware"`
 	OutputMuted                                bool   `ms:"client_output_muted"`
 	OutputOnlyMuted                            bool   `ms:"client_outputonly_muted"`
-	IsTalker                                   bool   `ms:"client_is_talker"`
+	// IsTalker indicates sufficient talk power, but some servers always report false.
+	IsTalker bool `ms:"client_is_talker"`
 }
 
 // ClientInfo returns detailed information about a single online client.
@@ -77,13 +79,14 @@ type DetailedOnlineClient struct {
 // IdleTime and ConnectionConnectedTime are decoded from milliseconds.
 func (s *ServerMethods) ClientInfo(clientID int) (*DetailedOnlineClient, error) {
 	response := struct {
-		DetailedOnlineClient  `ms:",squash"`
 		IdleMilliseconds      int64 `ms:"client_idle_time"`
 		ConnectedMilliseconds int64 `ms:"connection_connected_time"`
 		TalkRequestSeconds    int64 `ms:"client_talk_request"`
+
+		DetailedOnlineClient `ms:",squash"`
 	}{}
 	if _, err := s.ExecCmd(NewCmd("clientinfo").WithArgs(NewArg("clid", clientID)).WithResponse(&response)); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("clientinfo: %w", err)
 	}
 
 	if response.TalkRequestSeconds < 0 {
