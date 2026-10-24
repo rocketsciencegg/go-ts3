@@ -56,6 +56,9 @@ a `*ts3.DetailedOnlineClient`. Its `ID` is the requested client ID, while
 `time.Time` values; `IdleTime` and `ConnectionConnectedTime` are `time.Duration`
 values converted from the protocol's milliseconds. `ServerGroups` contains the
 numeric group IDs.
+`TalkRequest` is the time the client requested permission to talk, or the zero
+`time.Time` when no request is pending. `IconID` is a CRC32 value normalized to
+`uint32`, including when older servers send its signed representation.
 
 The detailed result is independent of `OnlineClient` and its optional
 `ClientList` extensions. The `ts3.ClientInfo` constant still selects the `-info`

@@ -18,6 +18,8 @@ type DetailedOnlineClient struct {
 
 	Created       time.Time `ms:"client_created"`
 	LastConnected time.Time `ms:"client_lastconnected"`
+	// TalkRequest is zero when the client has not requested permission to talk.
+	TalkRequest time.Time `ms:"-"`
 	// These durations are converted from protocol milliseconds by ClientInfo.
 	IdleTime                time.Duration `ms:"-"`
 	ConnectionConnectedTime time.Duration `ms:"-"`
@@ -58,7 +60,7 @@ type DetailedOnlineClient struct {
 	ServerGroups                               []int  `ms:"client_servergroups"`
 	TalkPower                                  int    `ms:"client_talk_power"`
 	TotalConnections                           int    `ms:"client_totalconnections"`
-	IconID                                     int64  `ms:"client_icon_id"`
+	IconID                                     uint32 `ms:"client_icon_id"`
 	InputHardware                              bool   `ms:"client_input_hardware"`
 	InputMuted                                 bool   `ms:"client_input_muted"`
 	IsChannelCommander                         bool   `ms:"client_is_channel_commander"`
@@ -67,7 +69,6 @@ type DetailedOnlineClient struct {
 	OutputHardware                             bool   `ms:"client_output_hardware"`
 	OutputMuted                                bool   `ms:"client_output_muted"`
 	OutputOnlyMuted                            bool   `ms:"client_outputonly_muted"`
-	TalkRequest                                bool   `ms:"client_talk_request"`
 	IsTalker                                   bool   `ms:"client_is_talker"`
 }
 
@@ -79,9 +80,17 @@ func (s *ServerMethods) ClientInfo(clientID int) (*DetailedOnlineClient, error) 
 		DetailedOnlineClient  `ms:",squash"`
 		IdleMilliseconds      int64 `ms:"client_idle_time"`
 		ConnectedMilliseconds int64 `ms:"connection_connected_time"`
+		TalkRequestSeconds    int64 `ms:"client_talk_request"`
 	}{}
 	if _, err := s.ExecCmd(NewCmd("clientinfo").WithArgs(NewArg("clid", clientID)).WithResponse(&response)); err != nil {
 		return nil, err
+	}
+
+	if response.TalkRequestSeconds < 0 {
+		return nil, fmt.Errorf("clientinfo: client_talk_request timestamp out of range: %d", response.TalkRequestSeconds)
+	}
+	if response.TalkRequestSeconds > 0 {
+		response.TalkRequest = time.Unix(response.TalkRequestSeconds, 0)
 	}
 
 	for _, duration := range []struct {
