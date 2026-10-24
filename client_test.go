@@ -12,62 +12,60 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/ssh"
 )
 
 func TestClient(t *testing.T) {
 	s := newServer(t)
 	defer func() {
-		assert.NoError(t, s.Close())
+		require.NoError(t, s.Close())
 	}()
 
 	c, err := NewClient(s.Addr, Timeout(time.Second))
-	if !assert.NoError(t, err) {
-		return
-	}
+	require.NoError(t, err)
 
 	defer func() {
-		assert.Error(t, c.Close())
+		require.Error(t, c.Close())
 	}()
 
 	_, err = c.Exec("version")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	_, err = c.ExecCmd(NewCmd("version"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	_, err = c.ExecCmd(NewCmd("invalid"))
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	_, err = c.ExecCmd(NewCmd("disconnect"))
-	assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 }
 
 func TestClientSSH(t *testing.T) {
 	s := newServer(t, useSSH())
 	defer func() {
-		assert.NoError(t, s.Close())
+		require.NoError(t, s.Close())
 	}()
 
 	c, err := NewClient(s.Addr, Timeout(time.Second), SSH(sshClientTestConfig))
-	if !assert.NoError(t, err) {
-		return
-	}
+	require.NoError(t, err)
 
 	defer func() {
-		assert.Error(t, c.Close())
+		require.Error(t, c.Close())
 	}()
 
 	_, err = c.Exec("version")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	_, err = c.ExecCmd(NewCmd("version"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	_, err = c.ExecCmd(NewCmd("invalid"))
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	_, err = c.ExecCmd(NewCmd("disconnect"))
-	assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 }
 
 func TestClientNilOption(t *testing.T) {
@@ -92,18 +90,16 @@ func TestClientOptionError(t *testing.T) {
 func TestClientDisconnect(t *testing.T) {
 	s := newServer(t)
 	defer func() {
-		assert.NoError(t, s.Close())
+		require.NoError(t, s.Close())
 	}()
 
 	c, err := NewClient(s.Addr, Timeout(time.Second))
-	if !assert.NoError(t, err) {
-		return
-	}
+	require.NoError(t, err)
 
-	assert.NoError(t, c.Close())
+	require.NoError(t, c.Close())
 
 	_, err = c.Exec("version")
-	assert.ErrorIs(t, err, ErrNotConnected)
+	require.ErrorIs(t, err, ErrNotConnected)
 }
 
 func TestClientDisconnectSSH(t *testing.T) {
@@ -126,18 +122,16 @@ func TestClientDisconnectSSH(t *testing.T) {
 func TestClientWriteFail(t *testing.T) {
 	s := newServer(t)
 	defer func() {
-		assert.NoError(t, s.Close())
+		require.NoError(t, s.Close())
 	}()
 
 	c, err := NewClient(s.Addr, Timeout(time.Second))
-	if !assert.NoError(t, err) {
-		return
-	}
-	assert.NoError(t, c.conn.(*legacyConnection).Conn.(*net.TCPConn).CloseWrite())
+	require.NoError(t, err)
+	require.NoError(t, c.conn.(*legacyConnection).Conn.(*net.TCPConn).CloseWrite())
 
 	_, err = c.Exec("version")
-	var opErr *net.OpError
-	assert.True(t, errors.Is(err, io.ErrUnexpectedEOF) || errors.As(err, &opErr), "lost transport error: %v", err)
+	opErr := new(net.OpError)
+	require.True(t, errors.Is(err, io.ErrUnexpectedEOF) || errors.As(err, &opErr), "lost transport error: %v", err)
 }
 
 func TestClientDialFail(t *testing.T) {
@@ -312,24 +306,27 @@ func TestClientBadHeader(t *testing.T) {
 func TestConcurrency(t *testing.T) {
 	for _, useSSHConnection := range []bool{false, true} {
 		t.Run(fmt.Sprintf("ssh=%t", useSSHConnection), func(t *testing.T) {
-			var serverOptions []serverOption
+			var (
+				serverOptions []serverOption
+				wg            sync.WaitGroup
+			)
 			options := []func(*Client) error{Timeout(time.Second)}
 			if useSSHConnection {
 				serverOptions = append(serverOptions, useSSH())
 				options = append(options, SSH(sshClientTestConfig))
 			}
 			s := newServer(t, serverOptions...)
-			defer func() { assert.NoError(t, s.Close()) }()
+			defer func() { require.NoError(t, s.Close()) }()
 			c, err := NewClient(s.Addr, options...)
-			if !assert.NoError(t, err) {
-				return
-			}
-			defer func() { assert.NoError(t, c.Close()) }()
+			require.NoError(t, err)
+			defer func() { require.NoError(t, c.Close()) }()
 
-			const workers, iterations = 8, 25
+			const (
+				workers    = 8
+				iterations = 25
+			)
 			results := make(chan error, workers)
 			start := make(chan struct{})
-			var wg sync.WaitGroup
 			for worker := 0; worker < workers; worker++ {
 				wg.Add(1)
 				go func(worker int) {
@@ -353,11 +350,11 @@ func TestConcurrency(t *testing.T) {
 			select {
 			case <-finished:
 			case <-time.After(5 * time.Second):
-				t.Fatal("concurrent commands did not finish")
+				require.FailNow(t, "concurrent commands did not finish")
 			}
 			close(results)
 			for err := range results {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -366,7 +363,7 @@ func TestConcurrency(t *testing.T) {
 func execConcurrentCommand(c *Client, cmd string) error {
 	lines, err := c.Exec(cmd)
 	if cmd == "invalid" {
-		var serverErr *Error
+		serverErr := new(Error)
 		if errors.As(err, &serverErr) && serverErr.ID == 256 {
 			return nil
 		}
@@ -403,16 +400,24 @@ func TestClientWorkTimeout(t *testing.T) {
 	}()
 	select {
 	case err := <-result:
-		assert.ErrorIs(t, err, ErrTimeout)
-		assert.True(t, c.IsConnected(), "an unsent command must not invalidate the connection")
+		require.ErrorIs(t, err, ErrTimeout)
+		require.True(t, c.IsConnected(), "an unsent command must not invalidate the connection")
 	case <-time.After(time.Second):
-		t.Error("command submission did not time out")
+		require.FailNow(t, "command submission did not time out")
 	}
 }
 
 func TestClientQueuedCommand(t *testing.T) {
-	for _, disconnect := range []bool{false, true} {
-		t.Run(fmt.Sprintf("disconnect=%t", disconnect), func(t *testing.T) {
+	testCases := []struct {
+		name      string
+		connected bool
+		err       error
+	}{
+		{name: "timeout", connected: true, err: ErrTimeout},
+		{name: "disconnect", err: ErrNotConnected},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
 			c := &Client{
 				timeout:     20 * time.Millisecond,
 				work:        make(chan string),
@@ -421,7 +426,7 @@ func TestClientQueuedCommand(t *testing.T) {
 			}
 			defer c.closeDone()
 			c.commandLock <- struct{}{}
-			if disconnect {
+			if !tc.connected {
 				c.closeDone()
 			}
 
@@ -432,19 +437,83 @@ func TestClientQueuedCommand(t *testing.T) {
 			}()
 			select {
 			case err := <-result:
-				if disconnect {
-					assert.ErrorIs(t, err, ErrNotConnected)
-				} else {
-					assert.ErrorIs(t, err, ErrTimeout)
-					assert.True(t, c.IsConnected())
-				}
+				require.ErrorIs(t, err, tc.err)
+				require.Equal(t, tc.connected, c.IsConnected())
 			case cmd := <-c.work:
-				t.Errorf("queued command was sent before the preceding response: %q", cmd)
+				require.FailNowf(t, "queued command sent before the preceding response", "command: %q", cmd)
 			case <-time.After(time.Second):
-				t.Error("queued command did not return")
+				require.FailNow(t, "queued command did not return")
 			}
 			<-c.commandLock
 		})
+	}
+}
+
+// blockedSSHChannel models a channel close waiting behind a transport write.
+type blockedSSHChannel struct {
+	conn    net.Conn
+	writing chan struct{}
+	mu      sync.Mutex
+
+	ssh.Channel
+}
+
+func (c *blockedSSHChannel) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	close(c.writing)
+	return c.conn.Write(p) //nolint: wrapcheck
+}
+
+func (c *blockedSSHChannel) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return nil
+}
+
+func TestClientQueuedSSHTimeoutAbortsTransport(t *testing.T) {
+	conn, peer := net.Pipe()
+	defer func() { require.NoError(t, peer.Close()) }()
+	channel := &blockedSSHChannel{conn: conn, writing: make(chan struct{})}
+	c := &Client{
+		conn:        &sshConnection{Conn: conn, channel: channel},
+		timeout:     600 * time.Millisecond,
+		keepAlive:   time.Hour,
+		work:        make(chan string),
+		commandLock: make(chan struct{}, 1),
+		response:    make(chan response),
+		done:        make(chan struct{}),
+	}
+	c.wg.Add(1)
+	go c.workHandler()
+	defer func() {
+		c.closeDone()
+		require.NoError(t, conn.Close())
+		c.wg.Wait()
+	}()
+
+	c.commandLock <- struct{}{}
+	started := make(chan struct{})
+	result := make(chan error, 1)
+	go func() {
+		close(started)
+		_, err := c.Exec("version")
+		result <- err
+	}()
+	<-started
+	time.Sleep(c.timeout * 2 / 3)
+	<-c.commandLock
+	select {
+	case <-channel.writing:
+	case <-time.After(time.Second):
+		require.FailNow(t, "queued command did not reach the SSH transport")
+	}
+	select {
+	case err := <-result:
+		require.ErrorIs(t, err, ErrTimeout)
+		require.False(t, c.IsConnected())
+	case <-time.After(c.timeout / 2):
+		require.FailNow(t, "SSH shutdown exceeded the remaining command budget")
 	}
 }
 
@@ -462,9 +531,9 @@ func TestClientLateResponseAfterDisconnect(t *testing.T) {
 			go c.messageHandler()
 			select {
 			case _, ok := <-c.notify:
-				assert.False(t, ok)
+				require.False(t, ok)
 			case <-time.After(time.Second):
-				t.Fatal("message handler blocked delivering a response after disconnect")
+				require.FailNow(t, "message handler blocked delivering a response after disconnect")
 			}
 			c.wg.Wait()
 		})
@@ -474,39 +543,39 @@ func TestClientLateResponseAfterDisconnect(t *testing.T) {
 func TestClientResponseTimeoutDisconnects(t *testing.T) {
 	for _, useSSHConnection := range []bool{false, true} {
 		t.Run(fmt.Sprintf("ssh=%t", useSSHConnection), func(t *testing.T) {
-			var serverOptions []serverOption
-			options := []func(*Client) error{Timeout(200 * time.Millisecond)}
+			var (
+				serverOptions []serverOption
+				options       = []func(*Client) error{Timeout(200 * time.Millisecond)}
+			)
 			if useSSHConnection {
 				serverOptions = append(serverOptions, useSSH())
 				options = append(options, SSH(sshClientTestConfig))
 			}
 			s := newServer(t, serverOptions...)
-			defer func() { assert.NoError(t, s.Close()) }()
+			defer func() { require.NoError(t, s.Close()) }()
 			c, err := NewClient(s.Addr, options...)
-			if !assert.NoError(t, err) {
-				return
-			}
-			defer func() { assert.ErrorIs(t, c.Close(), ErrNotConnected) }()
+			require.NoError(t, err)
+			defer func() { require.ErrorIs(t, c.Close(), ErrNotConnected) }()
 
 			_, err = c.Exec(" ")
-			assert.ErrorIs(t, err, ErrTimeout)
-			assert.False(t, c.IsConnected())
+			require.ErrorIs(t, err, ErrTimeout)
+			require.False(t, c.IsConnected())
 			_, err = c.Exec("version")
-			assert.ErrorIs(t, err, ErrNotConnected)
+			require.ErrorIs(t, err, ErrNotConnected)
 		})
 	}
 }
 
 func TestClientConcurrentDisconnect(t *testing.T) {
 	s := newServer(t)
-	defer func() { assert.NoError(t, s.Close()) }()
+	defer func() { require.NoError(t, s.Close()) }()
 	c, err := NewClient(s.Addr, Timeout(time.Second))
-	if !assert.NoError(t, err) {
-		return
-	}
-	defer func() { assert.ErrorIs(t, c.Close(), ErrNotConnected) }()
+	require.NoError(t, err)
+	defer func() { require.ErrorIs(t, c.Close(), ErrNotConnected) }()
 
-	const workers = 8
+	const (
+		workers = 8
+	)
 	results := make(chan error, workers)
 	start := make(chan struct{})
 	for i := 0; i < workers; i++ {
@@ -520,11 +589,11 @@ func TestClientConcurrentDisconnect(t *testing.T) {
 	for i := 0; i < workers; i++ {
 		select {
 		case err := <-results:
-			assert.Error(t, err)
-			assert.NotErrorIs(t, err, ErrTimeout)
+			require.Error(t, err)
+			require.NotErrorIs(t, err, ErrTimeout)
 		case <-time.After(2 * time.Second):
-			t.Fatal("command blocked after disconnect")
+			require.FailNow(t, "command blocked after disconnect")
 		}
 	}
-	assert.False(t, c.IsConnected())
+	require.False(t, c.IsConnected())
 }
