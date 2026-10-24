@@ -318,23 +318,28 @@ func TestClientBadHeader(t *testing.T) {
 }
 
 func TestConcurrency(t *testing.T) {
-	setup := func(t *testing.T, serverOptions []serverOption, options ...func(*Client) error) *Client {
+	setup := func(t *testing.T, serverOptions []serverOption, options ...func(*Client) error) (*Client, *server) {
 		t.Helper()
 		s := newServer(t, serverOptions...)
-		t.Cleanup(func() { require.NoError(t, s.Close()) })
 		c, err := NewClient(s.Addr, options...)
+		if err != nil {
+			require.NoError(t, s.Close())
+		}
 		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, c.Close()) })
-		return c
+		return c, s
 	}
 
 	t.Run("tcp", func(t *testing.T) {
-		c := setup(t, nil, Timeout(time.Second))
+		c, s := setup(t, nil, Timeout(time.Second))
+		defer func() { require.NoError(t, s.Close()) }()
+		defer func() { require.NoError(t, c.Close()) }()
 		requireConcurrentCommands(t, c)
 	})
 
 	t.Run("ssh", func(t *testing.T) {
-		c := setup(t, []serverOption{useSSH()}, Timeout(time.Second), SSH(sshClientTestConfig))
+		c, s := setup(t, []serverOption{useSSH()}, Timeout(time.Second), SSH(sshClientTestConfig))
+		defer func() { require.NoError(t, s.Close()) }()
+		defer func() { require.NoError(t, c.Close()) }()
 		requireConcurrentCommands(t, c)
 	})
 }
@@ -581,23 +586,28 @@ func requireLateResponseDiscarded(t *testing.T, c *Client) {
 }
 
 func TestClientResponseTimeoutDisconnects(t *testing.T) {
-	setup := func(t *testing.T, serverOptions []serverOption, options ...func(*Client) error) *Client {
+	setup := func(t *testing.T, serverOptions []serverOption, options ...func(*Client) error) (*Client, *server) {
 		t.Helper()
 		s := newServer(t, serverOptions...)
-		t.Cleanup(func() { require.NoError(t, s.Close()) })
 		c, err := NewClient(s.Addr, options...)
+		if err != nil {
+			require.NoError(t, s.Close())
+		}
 		require.NoError(t, err)
-		t.Cleanup(func() { require.ErrorIs(t, c.Close(), ErrNotConnected) })
-		return c
+		return c, s
 	}
 
 	t.Run("tcp", func(t *testing.T) {
-		c := setup(t, nil, Timeout(200*time.Millisecond))
+		c, s := setup(t, nil, Timeout(200*time.Millisecond))
+		defer func() { require.NoError(t, s.Close()) }()
+		defer func() { require.ErrorIs(t, c.Close(), ErrNotConnected) }()
 		requireResponseTimeoutDisconnect(t, c)
 	})
 
 	t.Run("ssh", func(t *testing.T) {
-		c := setup(t, []serverOption{useSSH()}, Timeout(200*time.Millisecond), SSH(sshClientTestConfig))
+		c, s := setup(t, []serverOption{useSSH()}, Timeout(200*time.Millisecond), SSH(sshClientTestConfig))
+		defer func() { require.NoError(t, s.Close()) }()
+		defer func() { require.ErrorIs(t, c.Close(), ErrNotConnected) }()
 		requireResponseTimeoutDisconnect(t, c)
 	})
 }
