@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCmdsServer(t *testing.T) {
@@ -438,8 +439,10 @@ func testCmdsServer(t *testing.T, c *Client) {
 
 func testClientListOptions(t *testing.T, c *Client) {
 	t.Helper()
-	falseP, trueP := false, true
-	emptyCountry, country := "", "BE"
+	var (
+		falseP, trueP         = false, true
+		emptyCountry, country = "", "BE"
+	)
 	tests := []struct {
 		name        string
 		options     []string
@@ -474,20 +477,18 @@ func testClientListOptions(t *testing.T, c *Client) {
 			away:        true,
 			awayMessage: "back soon",
 			ext: &OnlineClientExt{
+				Country: &country,
 				OnlineClientVoice: &OnlineClientVoice{
 					InputMuted:  &falseP,
 					OutputMuted: &trueP,
 				},
-				Country: &country,
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			clients, err := c.Server.ClientList(tt.options...)
-			if !assert.NoError(t, err) {
-				return
-			}
+			require.NoError(t, err)
 			expected := []*OnlineClient{
 				{
 					ID:              42087,
@@ -500,7 +501,7 @@ func testClientListOptions(t *testing.T, c *Client) {
 					OnlineClientExt: tt.ext,
 				},
 			}
-			assert.Equal(t, expected, clients)
+			require.Equal(t, expected, clients)
 		})
 	}
 }
