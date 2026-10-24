@@ -61,7 +61,7 @@ func DecodeResponse(lines []string, v interface{}) error {
 	value := reflect.ValueOf(v)
 	var slice reflect.Value
 	var elemType reflect.Type
-	if value.Kind() == reflect.Ptr {
+	if value.Kind() == reflect.Pointer {
 		slice = value.Elem()
 		if slice.Kind() == reflect.Slice {
 			elemType = slice.Type().Elem()
@@ -75,7 +75,7 @@ func DecodeResponse(lines []string, v interface{}) error {
 			if len(parts) == 2 {
 				v := Decode(parts[1])
 				if i, err := strconv.Atoi(v); err != nil {
-					// Only support comma seperated lists
+					// Only support comma separated lists
 					// by keyname to avoid incorrect decoding.
 					if key == "client_servergroups" {
 						parts := strings.Split(v, ",")
@@ -140,7 +140,7 @@ func decodeMap(d map[string]interface{}, r interface{}) error {
 // decodeSlice decodes input into slice.
 func decodeSlice(elemType reflect.Type, slice reflect.Value, input map[string]interface{}) error {
 	var v reflect.Value
-	if elemType.Kind() == reflect.Ptr {
+	if elemType.Kind() == reflect.Pointer {
 		v = reflect.New(elemType.Elem())
 	} else {
 		v = reflect.New(elemType)
@@ -154,15 +154,14 @@ func decodeSlice(elemType reflect.Type, slice reflect.Value, input map[string]in
 	// for embedded pointers to structs (the type is lost when
 	// using reflection for nil values). We need to add pointers
 	// to empty structs within the interface to get around this.
-	switch v.Interface().(type) {
-	case *OnlineClient:
+	if client, ok := v.Interface().(*OnlineClient); ok {
 		ext := &OnlineClientExt{
 			OnlineClientGroups: &OnlineClientGroups{},
 			OnlineClientInfo:   &OnlineClientInfo{},
 			OnlineClientTimes:  &OnlineClientTimes{},
 			OnlineClientVoice:  &OnlineClientVoice{},
 		}
-		v.Interface().(*OnlineClient).OnlineClientExt = ext
+		client.OnlineClientExt = ext
 	}
 
 	if err := decodeMap(input, v.Interface()); err != nil {
@@ -170,9 +169,8 @@ func decodeSlice(elemType reflect.Type, slice reflect.Value, input map[string]in
 	}
 
 	// nil out empty structs
-	switch v.Interface().(type) {
-	case *OnlineClient:
-		ext := v.Interface().(*OnlineClient).OnlineClientExt
+	if client, ok := v.Interface().(*OnlineClient); ok {
+		ext := client.OnlineClientExt
 		emptyExt := OnlineClientExt{}
 		emptyExtGroups := OnlineClientGroups{}
 		emptyExtInfo := OnlineClientInfo{}
@@ -180,19 +178,19 @@ func decodeSlice(elemType reflect.Type, slice reflect.Value, input map[string]in
 		emptyExtVoice := OnlineClientVoice{}
 
 		if *ext.OnlineClientGroups == emptyExtGroups {
-			v.Interface().(*OnlineClient).OnlineClientExt.OnlineClientGroups = nil
+			client.OnlineClientGroups = nil
 		}
 
 		if *ext.OnlineClientInfo == emptyExtInfo {
-			v.Interface().(*OnlineClient).OnlineClientExt.OnlineClientInfo = nil
+			client.OnlineClientInfo = nil
 		}
 
 		if *ext.OnlineClientTimes == emptyExtTimes {
-			v.Interface().(*OnlineClient).OnlineClientExt.OnlineClientTimes = nil
+			client.OnlineClientTimes = nil
 		}
 
 		if *ext.OnlineClientVoice == emptyExtVoice {
-			v.Interface().(*OnlineClient).OnlineClientExt.OnlineClientVoice = nil
+			client.OnlineClientVoice = nil
 		}
 
 		if *ext == emptyExt {

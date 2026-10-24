@@ -27,6 +27,8 @@ linters:
     - whitespace
     - wrapcheck
   settings:
+    gocognit:
+      min-complexity: 45
     depguard:
       rules:
         main:

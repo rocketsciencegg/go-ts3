@@ -15,7 +15,7 @@ func TestScanLines(t *testing.T) {
 	s.Split(ScanLines)
 
 	lines := []string{
-		"line1",
+		testLine1,
 		"line2",
 		"line3",
 	}

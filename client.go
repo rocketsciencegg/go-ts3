@@ -109,16 +109,16 @@ func NotificationBuffer(size int) func(*Client) error {
 
 // Buffer sets the initial buffer used to parse responses from
 // the server and the maximum size of buffer that may be allocated.
-// The maximum parsable token size is the larger of max and cap(buf).
-// If max <= cap(buf), scanning will use this buffer only and do no
+// The maximum parsable token size is the larger of maxSize and cap(buf).
+// If maxSize <= cap(buf), scanning will use this buffer only and do no
 // allocation.
 //
 // By default, parsing uses an internal buffer and sets the maximum
 // token size to MaxParseTokenSize.
-func Buffer(buf []byte, max int) func(*Client) error {
+func Buffer(buf []byte, maxSize int) func(*Client) error {
 	return func(c *Client) error {
 		c.buf = buf
-		c.maxBufSize = max
+		c.maxBufSize = maxSize
 		return nil
 	}
 }

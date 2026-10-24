@@ -14,8 +14,12 @@ import (
 )
 
 const (
-	cmdQuit = "quit"
-	banner  = `Welcome to the TeamSpeak 3 ServerQuery interface, type "help" for a list of commands and "help <command>" for information on a specific command.`
+	cmdVersion    = "version"
+	cmdClientList = "clientlist"
+	statusOnline  = "online"
+	testLine1     = "line1"
+	cmdQuit       = "quit"
+	banner        = `Welcome to the TeamSpeak 3 ServerQuery interface, type "help" for a list of commands and "help <command>" for information on a specific command.`
 
 	errUnknownCmd = `error id=256 msg=command\snot\sfound`
 	errOK         = `error id=0 msg=ok`
@@ -25,7 +29,7 @@ const (
 )
 
 var commands = map[string]string{
-	"version":                     "version=3.0.12.2 build=1455547898 platform=FreeBSD",
+	cmdVersion:                    "version=3.0.12.2 build=1455547898 platform=FreeBSD",
 	"login":                       "",
 	"logout":                      "",
 	"use":                         "",
@@ -43,7 +47,7 @@ var commands = map[string]string{
 	"instanceinfo":                "serverinstance_database_version=26 serverinstance_filetransfer_port=30033 serverinstance_max_download_total_bandwidth=18446744073709551615 serverinstance_max_upload_total_bandwidth=18446744073709551615 serverinstance_guest_serverquery_group=1 serverinstance_serverquery_flood_commands=50 serverinstance_serverquery_flood_time=3 serverinstance_serverquery_ban_time=600 serverinstance_template_serveradmin_group=3 serverinstance_template_serverdefault_group=5 serverinstance_template_channeladmin_group=1 serverinstance_template_channeldefault_group=4 serverinstance_permissions_version=19 serverinstance_pending_connections_per_ip=0",
 	"serverrequestconnectioninfo": "connection_filetransfer_bandwidth_sent=0 connection_filetransfer_bandwidth_received=0 connection_filetransfer_bytes_sent_total=617 connection_filetransfer_bytes_received_total=0 connection_packets_sent_total=926413 connection_bytes_sent_total=92911395 connection_packets_received_total=650335 connection_bytes_received_total=61940731 connection_bandwidth_sent_last_second_total=0 connection_bandwidth_sent_last_minute_total=0 connection_bandwidth_received_last_second_total=0 connection_bandwidth_received_last_minute_total=0 connection_connected_time=49408 connection_packetloss_total=0.0000 connection_ping=0.0000 connection_packets_sent_speech=320432180 connection_bytes_sent_speech=43805818511 connection_packets_received_speech=174885295 connection_bytes_received_speech=24127808273 connection_packets_sent_keepalive=55230363 connection_bytes_sent_keepalive=2264444883 connection_packets_received_keepalive=55149547 connection_bytes_received_keepalive=2316390993 connection_packets_sent_control=2376088 connection_bytes_sent_control=525691022 connection_packets_received_control=2376138 connection_bytes_received_control=227044870",
 	"channellist":                 "cid=499 pid=0 channel_order=0 channel_name=Default\\sChannel total_clients=1 channel_needed_subscribe_power=0",
-	"clientlist":                  `clid=42087 cid=39 client_database_id=19 client_nickname=bdeb1337 client_type=0 client_away=0 client_away_message`,
+	cmdClientList:                 `clid=42087 cid=39 client_database_id=19 client_nickname=bdeb1337 client_type=0 client_away=0 client_away_message`,
 	"clientlist -uid -away -voice -times -groups -info -icon -country -ip -badges": `clid=42087 cid=39 client_database_id=19 client_nickname=bdeb1337 client_type=0 client_away=1 client_away_message=afk client_flag_talking=0 client_input_muted=0 client_output_muted=0 client_input_hardware=1 client_output_hardware=1 client_talk_power=75 client_is_talker=0 client_is_priority_speaker=0 client_is_recording=0 client_is_channel_commander=0 client_unique_identifier=DZhdQU58qyooEK4Fr8Ly738hEmc= client_servergroups=6,8 client_channel_group_id=8 client_channel_group_inherited_channel_id=39 client_version=3.6.1\s[Build:\s1690193193] client_platform=OS\sX client_idle_time=1280228 client_created=1661793049 client_lastconnected=1691527133 client_icon_id=0 client_country=BE connection_client_ip=1.3.3.7 client_badges`,
 	"clientdblist": "cldbid=7 client_unique_identifier=DZhdQU58qyooEK4Fr8Ly738hEmc= client_nickname=MuhChy client_created=1259147468 client_lastconnected=1259421233",
 	"whoami":       "virtualserver_status=online virtualserver_id=18 virtualserver_unique_identifier=gNITtWtKs9+Uh3L4LKv8\\/YHsn5c= virtualserver_port=9987 client_id=94 client_channel_id=432 client_nickname=serveradmin\\sfrom\\s127.0.0.1:49725 client_database_id=1 client_login_name=serveradmin client_unique_identifier=serveradmin client_origin_server_id=0",
@@ -259,7 +263,7 @@ func (s *server) handle(conn net.Conn) {
 		cmd := strings.TrimSpace(parts[0])
 		// Support server commands with specific optional parameters,
 		// they can be bypassed from the usual parameter trimming here.
-		if cmd == "clientlist" {
+		if cmd == cmdClientList {
 			cmd = l
 		}
 		resp, ok := commands[cmd]
