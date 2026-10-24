@@ -71,6 +71,7 @@ type sshConnection struct {
 // Connect connects to the address with the given timeout and opens a new SSH channel with attached shell.
 // The timeout applies to dialing and each underlying write, including SSH protocol
 // writes triggered by reading from the channel. A zero timeout disables these limits.
+// Waiting for notifications does not itself have a read timeout.
 func (c *sshConnection) Connect(addr string, timeout time.Duration) error {
 	addr, err := verifyAddr(addr, DefaultSSHPort)
 	if err != nil {
