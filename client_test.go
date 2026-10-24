@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"sync"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestClient(t *testing.T) {
@@ -39,7 +39,7 @@ func TestClient(t *testing.T) {
 	assert.Error(t, err)
 
 	_, err = c.ExecCmd(NewCmd("disconnect"))
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
 }
 
 func TestClientSSH(t *testing.T) {
@@ -67,7 +67,7 @@ func TestClientSSH(t *testing.T) {
 	assert.Error(t, err)
 
 	_, err = c.ExecCmd(NewCmd("disconnect"))
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
 }
 
 func TestClientNilOption(t *testing.T) {
@@ -103,7 +103,7 @@ func TestClientDisconnect(t *testing.T) {
 	assert.NoError(t, c.Close())
 
 	_, err = c.Exec("version")
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrNotConnected)
 }
 
 func TestClientDisconnectSSH(t *testing.T) {
@@ -136,7 +136,8 @@ func TestClientWriteFail(t *testing.T) {
 	assert.NoError(t, c.conn.(*legacyConnection).Conn.(*net.TCPConn).CloseWrite())
 
 	_, err = c.Exec("version")
-	assert.Error(t, err)
+	var opErr *net.OpError
+	assert.True(t, errors.Is(err, io.ErrUnexpectedEOF) || errors.As(err, &opErr), "lost transport error: %v", err)
 }
 
 func TestClientDialFail(t *testing.T) {
@@ -320,7 +321,9 @@ func TestConcurrency(t *testing.T) {
 			s := newServer(t, serverOptions...)
 			defer func() { assert.NoError(t, s.Close()) }()
 			c, err := NewClient(s.Addr, options...)
-			require.NoError(t, err)
+			if !assert.NoError(t, err) {
+				return
+			}
 			defer func() { assert.NoError(t, c.Close()) }()
 
 			const workers, iterations = 8, 25
@@ -334,23 +337,8 @@ func TestConcurrency(t *testing.T) {
 					<-start
 					for i := 0; i < iterations; i++ {
 						cmd := []string{"version", "servergrouplist", "login", "invalid"}[(worker+i)%4]
-						lines, err := c.Exec(cmd)
-						if cmd == "invalid" {
-							var serverErr *Error
-							if !errors.As(err, &serverErr) || serverErr.ID != 256 {
-								results <- fmt.Errorf("%s: unexpected error %v", cmd, err)
-								return
-							}
-						} else if err != nil {
-							results <- fmt.Errorf("%s: %w", cmd, err)
-							return
-						} else if expected := commands[cmd]; expected == "" {
-							if len(lines) != 0 {
-								results <- fmt.Errorf("%s: unexpected response %q", cmd, lines)
-								return
-							}
-						} else if len(lines) != 1 || lines[0] != expected {
-							results <- fmt.Errorf("%s: incorrect response %q", cmd, lines)
+						if err := execConcurrentCommand(c, cmd); err != nil {
+							results <- err
 							return
 						}
 					}
@@ -373,6 +361,31 @@ func TestConcurrency(t *testing.T) {
 			}
 		})
 	}
+}
+
+func execConcurrentCommand(c *Client, cmd string) error {
+	lines, err := c.Exec(cmd)
+	if cmd == "invalid" {
+		var serverErr *Error
+		if errors.As(err, &serverErr) && serverErr.ID == 256 {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("%s: unexpected server error: %w", cmd, err)
+		}
+		return fmt.Errorf("%s: expected server error", cmd)
+	}
+	if err != nil {
+		return fmt.Errorf("%s: %w", cmd, err)
+	}
+	if expected := commands[cmd]; expected == "" {
+		if len(lines) == 0 {
+			return nil
+		}
+	} else if len(lines) == 1 && lines[0] == expected {
+		return nil
+	}
+	return fmt.Errorf("%s: incorrect response %q", cmd, lines)
 }
 
 func TestClientWorkTimeout(t *testing.T) {
@@ -462,7 +475,7 @@ func TestClientResponseTimeoutDisconnects(t *testing.T) {
 	for _, useSSHConnection := range []bool{false, true} {
 		t.Run(fmt.Sprintf("ssh=%t", useSSHConnection), func(t *testing.T) {
 			var serverOptions []serverOption
-			options := []func(*Client) error{Timeout(50 * time.Millisecond)}
+			options := []func(*Client) error{Timeout(200 * time.Millisecond)}
 			if useSSHConnection {
 				serverOptions = append(serverOptions, useSSH())
 				options = append(options, SSH(sshClientTestConfig))
@@ -470,7 +483,9 @@ func TestClientResponseTimeoutDisconnects(t *testing.T) {
 			s := newServer(t, serverOptions...)
 			defer func() { assert.NoError(t, s.Close()) }()
 			c, err := NewClient(s.Addr, options...)
-			require.NoError(t, err)
+			if !assert.NoError(t, err) {
+				return
+			}
 			defer func() { assert.ErrorIs(t, c.Close(), ErrNotConnected) }()
 
 			_, err = c.Exec(" ")
@@ -486,7 +501,9 @@ func TestClientConcurrentDisconnect(t *testing.T) {
 	s := newServer(t)
 	defer func() { assert.NoError(t, s.Close()) }()
 	c, err := NewClient(s.Addr, Timeout(time.Second))
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer func() { assert.ErrorIs(t, c.Close(), ErrNotConnected) }()
 
 	const workers = 8
