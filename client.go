@@ -256,7 +256,7 @@ func (c *Client) messageHandler() {
 	for c.scanner.Scan() {
 		line := c.scanner.Text()
 		if line == "error id=0 msg=ok" {
-			var resp response
+			resp := response{}
 			// Avoid creating a new buf if there was no data in the response.
 			if len(buf) > 0 {
 				resp.lines = buf
@@ -345,7 +345,10 @@ func (c *Client) Exec(cmd string) ([]string, error) {
 // If a sent command times out, the connection is closed because a late response
 // cannot safely be associated with a subsequent command.
 func (c *Client) ExecCmd(cmd *Cmd) ([]string, error) {
-	timer := time.NewTimer(c.timeout)
+	var (
+		timer = time.NewTimer(c.timeout)
+		resp  response
+	)
 	defer timer.Stop()
 
 	select {
@@ -369,7 +372,6 @@ func (c *Client) ExecCmd(cmd *Cmd) ([]string, error) {
 		return nil, ErrTimeout
 	}
 
-	var resp response
 	select {
 	case resp = <-c.response:
 		if resp.err != nil {
@@ -382,8 +384,13 @@ func (c *Client) ExecCmd(cmd *Cmd) ([]string, error) {
 		return nil, ErrNotConnected
 	case <-timer.C:
 		c.closeDone()
-		if err := c.conn.Close(); err != nil {
-			return nil, fmt.Errorf("%w: close connection: %s", ErrTimeout, err.Error())
+		closeConn := c.conn.Close
+		if conn, ok := c.conn.(*sshConnection); ok {
+			// A graceful SSH channel close can wait behind a blocked write.
+			closeConn = conn.Conn.Close
+		}
+		if err := closeConn(); err != nil {
+			return nil, fmt.Errorf("close timed-out connection: %s: %w", err.Error(), ErrTimeout)
 		}
 		return nil, ErrTimeout
 	}
