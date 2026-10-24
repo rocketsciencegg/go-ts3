@@ -12,47 +12,24 @@ permissions:
 
 jobs:
   go:
-    strategy:
-      matrix:
-        go: ['1.27']
-        golangci: [v2.15.0]
-    name: lint
+    name: Go 1.27
     runs-on: ubuntu-latest
     steps:
-      - name: Setup
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ matrix.go }}
-          check-latest: true
-
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Go Cache Paths
-        id: go-cache-paths
-        shell: bash
-        run: |
-          echo "GOCACHE=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
-          echo "GOMODCACHE=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
-
-      - name: Go Build Cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          path: ${{ steps.go-cache-paths.outputs.GOCACHE }}
-          key: ${{ runner.os }}-GOCACHE-${{ hashFiles('**/go.sum') }}
-
-      - name: Go Mod Cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ steps.go-cache-paths.outputs.GOMODCACHE }}
-          key: ${{ runner.os }}-GOMODCACHE-${{ hashFiles('**/go.sum') }}
+          go-version: '1.27'
+          check-latest: true
+          cache: true
+          cache-dependency-path: go.sum
 
       - name: Go Lint Standard
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: ${{ matrix.golangci }}
-          args: "--output.text.colors"
-          skip-cache: true
+          version: v2.15.0
 
       - name: Go Build
         run: go build ./...
