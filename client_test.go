@@ -3,7 +3,6 @@ package ts3
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -15,6 +14,21 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh"
 )
+
+type concurrentCommandResult struct {
+	cmd   string
+	lines []string
+	err   error
+}
+
+// blockedSSHChannel models a channel close waiting behind a transport write.
+type blockedSSHChannel struct {
+	conn    net.Conn
+	writing chan struct{}
+	mu      sync.Mutex
+
+	ssh.Channel
+}
 
 func TestClient(t *testing.T) {
 	s := newServer(t)
@@ -304,85 +318,99 @@ func TestClientBadHeader(t *testing.T) {
 }
 
 func TestConcurrency(t *testing.T) {
-	for _, useSSHConnection := range []bool{false, true} {
-		t.Run(fmt.Sprintf("ssh=%t", useSSHConnection), func(t *testing.T) {
-			var (
-				serverOptions []serverOption
-				wg            sync.WaitGroup
-			)
-			options := []func(*Client) error{Timeout(time.Second)}
-			if useSSHConnection {
-				serverOptions = append(serverOptions, useSSH())
-				options = append(options, SSH(sshClientTestConfig))
-			}
-			s := newServer(t, serverOptions...)
-			defer func() { require.NoError(t, s.Close()) }()
-			c, err := NewClient(s.Addr, options...)
-			require.NoError(t, err)
-			defer func() { require.NoError(t, c.Close()) }()
+	setup := func(t *testing.T, serverOptions []serverOption, options ...func(*Client) error) *Client {
+		t.Helper()
+		s := newServer(t, serverOptions...)
+		t.Cleanup(func() { require.NoError(t, s.Close()) })
+		c, err := NewClient(s.Addr, options...)
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, c.Close()) })
+		return c
+	}
 
-			const (
-				workers    = 8
-				iterations = 25
-			)
-			results := make(chan error, workers)
-			start := make(chan struct{})
-			for worker := 0; worker < workers; worker++ {
-				wg.Add(1)
-				go func(worker int) {
-					defer wg.Done()
-					<-start
-					for i := 0; i < iterations; i++ {
-						cmd := []string{"version", "servergrouplist", "login", "invalid"}[(worker+i)%4]
-						if err := execConcurrentCommand(c, cmd); err != nil {
-							results <- err
-							return
-						}
-					}
-				}(worker)
+	t.Run("tcp", func(t *testing.T) {
+		c := setup(t, nil, Timeout(time.Second))
+		requireConcurrentCommands(t, c)
+	})
+
+	t.Run("ssh", func(t *testing.T) {
+		c := setup(t, []serverOption{useSSH()}, Timeout(time.Second), SSH(sshClientTestConfig))
+		requireConcurrentCommands(t, c)
+	})
+}
+
+func requireConcurrentCommands(t *testing.T, c *Client) {
+	t.Helper()
+
+	const (
+		workers    = 8
+		iterations = 25
+	)
+	var wg sync.WaitGroup
+	successes := make(chan concurrentCommandResult, workers*iterations)
+	failures := make(chan concurrentCommandResult, workers*iterations)
+	start := make(chan struct{})
+
+	for worker := 0; worker < workers; worker++ {
+		wg.Add(1)
+		go func(worker int) {
+			defer wg.Done()
+			<-start
+
+			for i := 0; i < iterations; i++ {
+				cmd := []string{"version", "servergrouplist", "login", "invalid"}[(worker+i)%4]
+				lines, err := c.Exec(cmd)
+				result := concurrentCommandResult{cmd: cmd, lines: lines, err: err}
+
+				if cmd == "invalid" {
+					failures <- result
+				} else {
+					successes <- result
+				}
 			}
-			close(start)
-			finished := make(chan struct{})
-			go func() {
-				wg.Wait()
-				close(finished)
-			}()
-			select {
-			case <-finished:
-			case <-time.After(5 * time.Second):
-				require.FailNow(t, "concurrent commands did not finish")
-			}
-			close(results)
-			for err := range results {
-				require.NoError(t, err)
-			}
-		})
+		}(worker)
+	}
+	close(start)
+	finished := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(finished)
+	}()
+
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "concurrent commands did not finish")
+	}
+	close(successes)
+	close(failures)
+
+	for result := range successes {
+		requireConcurrentCommandSuccess(t, result)
+	}
+
+	for result := range failures {
+		requireConcurrentCommandError(t, result)
 	}
 }
 
-func execConcurrentCommand(c *Client, cmd string) error {
-	lines, err := c.Exec(cmd)
-	if cmd == "invalid" {
-		serverErr := new(Error)
-		if errors.As(err, &serverErr) && serverErr.ID == 256 {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("%s: unexpected server error: %w", cmd, err)
-		}
-		return fmt.Errorf("%s: expected server error", cmd)
+func requireConcurrentCommandSuccess(t *testing.T, result concurrentCommandResult) {
+	t.Helper()
+	require.NoError(t, result.err, "command: %s", result.cmd)
+
+	var expected []string
+	if line := commands[result.cmd]; line != "" {
+		expected = []string{line}
 	}
-	if err != nil {
-		return fmt.Errorf("%s: %w", cmd, err)
-	}
-	if expected := commands[cmd]; expected == "" {
-		if len(lines) == 0 {
-			return nil
-		}
-	} else if len(lines) == 1 && lines[0] == expected {
-		return nil
-	}
-	return fmt.Errorf("%s: incorrect response %q", cmd, lines)
+	require.Equal(t, expected, result.lines, "command: %s", result.cmd)
+}
+
+func requireConcurrentCommandError(t *testing.T, result concurrentCommandResult) {
+	t.Helper()
+	serverErr := new(Error)
+	require.ErrorAs(t, result.err, &serverErr)
+	require.Equal(t, 256, serverErr.ID)
+	require.Empty(t, result.lines)
 }
 
 func TestClientWorkTimeout(t *testing.T) {
@@ -408,54 +436,52 @@ func TestClientWorkTimeout(t *testing.T) {
 }
 
 func TestClientQueuedCommand(t *testing.T) {
-	testCases := []struct {
-		name      string
-		connected bool
-		err       error
-	}{
-		{name: "timeout", connected: true, err: ErrTimeout},
-		{name: "disconnect", err: ErrNotConnected},
+	setup := func() *Client {
+		c := &Client{
+			timeout:     20 * time.Millisecond,
+			work:        make(chan string),
+			commandLock: make(chan struct{}, 1),
+			done:        make(chan struct{}),
+		}
+		c.commandLock <- struct{}{}
+		return c
 	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			c := &Client{
-				timeout:     20 * time.Millisecond,
-				work:        make(chan string),
-				commandLock: make(chan struct{}, 1),
-				done:        make(chan struct{}),
-			}
-			defer c.closeDone()
-			c.commandLock <- struct{}{}
-			if !tc.connected {
-				c.closeDone()
-			}
 
-			result := make(chan error, 1)
-			go func() {
-				_, err := c.Exec("version")
-				result <- err
-			}()
-			select {
-			case err := <-result:
-				require.ErrorIs(t, err, tc.err)
-				require.Equal(t, tc.connected, c.IsConnected())
-			case cmd := <-c.work:
-				require.FailNowf(t, "queued command sent before the preceding response", "command: %q", cmd)
-			case <-time.After(time.Second):
-				require.FailNow(t, "queued command did not return")
-			}
-			<-c.commandLock
-		})
-	}
+	t.Run("timeout", func(t *testing.T) {
+		c := setup()
+		defer c.closeDone()
+
+		requireQueuedCommandError(t, c, ErrTimeout)
+		require.True(t, c.IsConnected())
+		<-c.commandLock
+	})
+
+	t.Run("disconnect", func(t *testing.T) {
+		c := setup()
+		c.closeDone()
+
+		requireQueuedCommandError(t, c, ErrNotConnected)
+		require.False(t, c.IsConnected())
+		<-c.commandLock
+	})
 }
 
-// blockedSSHChannel models a channel close waiting behind a transport write.
-type blockedSSHChannel struct {
-	conn    net.Conn
-	writing chan struct{}
-	mu      sync.Mutex
+func requireQueuedCommandError(t *testing.T, c *Client, expected error) {
+	t.Helper()
+	result := make(chan error, 1)
+	go func() {
+		_, err := c.Exec("version")
+		result <- err
+	}()
 
-	ssh.Channel
+	select {
+	case err := <-result:
+		require.ErrorIs(t, err, expected)
+	case cmd := <-c.work:
+		require.FailNowf(t, "queued command sent before the preceding response", "command: %q", cmd)
+	case <-time.After(time.Second):
+		require.FailNow(t, "queued command did not return")
+	}
 }
 
 func (c *blockedSSHChannel) Write(p []byte) (int, error) {
@@ -518,52 +544,71 @@ func TestClientQueuedSSHTimeoutAbortsTransport(t *testing.T) {
 }
 
 func TestClientLateResponseAfterDisconnect(t *testing.T) {
-	for _, trailer := range []string{errOK, errUnknownCmd} {
-		t.Run(trailer, func(t *testing.T) {
-			c := &Client{
-				scanner:  bufio.NewScanner(strings.NewReader("late response\n" + trailer + "\n")),
-				response: make(chan response),
-				notify:   make(chan Notification),
-				done:     make(chan struct{}),
-			}
-			c.closeDone()
-			c.wg.Add(1)
-			go c.messageHandler()
-			select {
-			case _, ok := <-c.notify:
-				require.False(t, ok)
-			case <-time.After(time.Second):
-				require.FailNow(t, "message handler blocked delivering a response after disconnect")
-			}
-			c.wg.Wait()
-		})
+	setup := func(trailer string) *Client {
+		c := &Client{
+			scanner:  bufio.NewScanner(strings.NewReader("late response\n" + trailer + "\n")),
+			response: make(chan response),
+			notify:   make(chan Notification),
+			done:     make(chan struct{}),
+		}
+		c.closeDone()
+		return c
 	}
+
+	t.Run("success-response", func(t *testing.T) {
+		c := setup(errOK)
+		requireLateResponseDiscarded(t, c)
+	})
+
+	t.Run("error-response", func(t *testing.T) {
+		c := setup(errUnknownCmd)
+		requireLateResponseDiscarded(t, c)
+	})
+}
+
+func requireLateResponseDiscarded(t *testing.T, c *Client) {
+	t.Helper()
+	c.wg.Add(1)
+	go c.messageHandler()
+
+	select {
+	case _, ok := <-c.notify:
+		require.False(t, ok)
+	case <-time.After(time.Second):
+		require.FailNow(t, "message handler blocked delivering a response after disconnect")
+	}
+	c.wg.Wait()
 }
 
 func TestClientResponseTimeoutDisconnects(t *testing.T) {
-	for _, useSSHConnection := range []bool{false, true} {
-		t.Run(fmt.Sprintf("ssh=%t", useSSHConnection), func(t *testing.T) {
-			var (
-				serverOptions []serverOption
-				options       = []func(*Client) error{Timeout(200 * time.Millisecond)}
-			)
-			if useSSHConnection {
-				serverOptions = append(serverOptions, useSSH())
-				options = append(options, SSH(sshClientTestConfig))
-			}
-			s := newServer(t, serverOptions...)
-			defer func() { require.NoError(t, s.Close()) }()
-			c, err := NewClient(s.Addr, options...)
-			require.NoError(t, err)
-			defer func() { require.ErrorIs(t, c.Close(), ErrNotConnected) }()
-
-			_, err = c.Exec(" ")
-			require.ErrorIs(t, err, ErrTimeout)
-			require.False(t, c.IsConnected())
-			_, err = c.Exec("version")
-			require.ErrorIs(t, err, ErrNotConnected)
-		})
+	setup := func(t *testing.T, serverOptions []serverOption, options ...func(*Client) error) *Client {
+		t.Helper()
+		s := newServer(t, serverOptions...)
+		t.Cleanup(func() { require.NoError(t, s.Close()) })
+		c, err := NewClient(s.Addr, options...)
+		require.NoError(t, err)
+		t.Cleanup(func() { require.ErrorIs(t, c.Close(), ErrNotConnected) })
+		return c
 	}
+
+	t.Run("tcp", func(t *testing.T) {
+		c := setup(t, nil, Timeout(200*time.Millisecond))
+		requireResponseTimeoutDisconnect(t, c)
+	})
+
+	t.Run("ssh", func(t *testing.T) {
+		c := setup(t, []serverOption{useSSH()}, Timeout(200*time.Millisecond), SSH(sshClientTestConfig))
+		requireResponseTimeoutDisconnect(t, c)
+	})
+}
+
+func requireResponseTimeoutDisconnect(t *testing.T, c *Client) {
+	t.Helper()
+	_, err := c.Exec(" ")
+	require.ErrorIs(t, err, ErrTimeout)
+	require.False(t, c.IsConnected())
+	_, err = c.Exec("version")
+	require.ErrorIs(t, err, ErrNotConnected)
 }
 
 func TestClientConcurrentDisconnect(t *testing.T) {
