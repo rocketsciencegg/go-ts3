@@ -59,6 +59,7 @@ command to finish. A timeout before sending leaves the connection usable. If a
 sent command times out, the client closes the connection to prevent a late
 response from being returned to a later command. Create a new client to reconnect.
 Subsequent commands on the disconnected client return `ErrNotConnected`.
+`Close` on an already disconnected client also returns `ErrNotConnected`.
 
 License
 -------

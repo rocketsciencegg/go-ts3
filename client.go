@@ -25,9 +25,6 @@ const (
 
 	// startBufSize is the initial size of allocation for the parse buffer.
 	startBufSize = 4096
-
-	// responseErrTimeout is the timeout used for sending response errors.
-	responseErrTimeout = time.Millisecond * 100
 )
 
 var (
@@ -78,6 +75,7 @@ type Client struct {
 	closing       chan struct{} // closing is closed to indicate we're closing our connection.
 	done          chan struct{} // done is closed once we're seen a fatal error.
 	doneOnce      sync.Once
+	fatalErr      error // Published before done is closed.
 	connectHeader string
 	wg            sync.WaitGroup
 
@@ -230,7 +228,10 @@ func (c *Client) fatalError(err error) bool {
 		return false
 	}
 
-	c.closeDone()
+	c.doneOnce.Do(func() {
+		c.fatalErr = err
+		close(c.done)
+	})
 	return true
 }
 
@@ -252,65 +253,51 @@ func (c *Client) messageHandler() {
 	}()
 
 	buf := make([]string, 0, 10)
-	for {
-		if c.scanner.Scan() {
-			line := c.scanner.Text()
-			if line == "error id=0 msg=ok" {
-				var resp response
-				// Avoid creating a new buf if there was no data in the response.
-				if len(buf) > 0 {
-					resp.lines = buf
-					buf = make([]string, 0, 10)
-				}
+	for c.scanner.Scan() {
+		line := c.scanner.Text()
+		if line == "error id=0 msg=ok" {
+			var resp response
+			// Avoid creating a new buf if there was no data in the response.
+			if len(buf) > 0 {
+				resp.lines = buf
+				buf = make([]string, 0, 10)
+			}
+			if !c.sendResponse(resp) {
+				return
+			}
+		} else if matches := respTrailerRe.FindStringSubmatch(line); len(matches) == 4 {
+			if !c.sendResponse(response{err: NewError(matches)}) {
+				return
+			}
+			// Avoid creating a new buf if there was no data in the response.
+			if len(buf) > 0 {
+				buf = make([]string, 0, 10)
+			}
+		} else if strings.Index(line, "notify") == 0 {
+			if n, err := decodeNotification(line); err == nil {
+				// non-blocking write
 				select {
-				case c.response <- resp:
-				case <-c.done:
-					return
+				case c.notify <- n:
+				default:
 				}
-			} else if matches := respTrailerRe.FindStringSubmatch(line); len(matches) == 4 {
-				select {
-				case c.response <- response{err: NewError(matches)}:
-				case <-c.done:
-					return
-				}
-				// Avoid creating a new buf if there was no data in the response.
-				if len(buf) > 0 {
-					buf = make([]string, 0, 10)
-				}
-			} else if strings.Index(line, "notify") == 0 {
-				if n, err := decodeNotification(line); err == nil {
-					// non-blocking write
-					select {
-					case c.notify <- n:
-					default:
-					}
-				}
-			} else {
-				// Partial response.
-				buf = append(buf, line)
 			}
 		} else {
-			if err := c.scanErr(); c.fatalError(err) {
-				c.responseErr(err)
-			} else {
-				// Ensure that done is closed as scanner has seen an io.EOF.
-				c.closeDone()
-			}
-			return
+			// Partial response.
+			buf = append(buf, line)
 		}
+	}
+	if !c.fatalError(c.scanErr()) {
+		// Ensure that done is closed as scanner has seen an io.EOF.
+		c.closeDone()
 	}
 }
 
-// responseErr sends err to c.response with a timeout to ensure it
-// doesn't block forever when multiple errors occur during the
-// processing of a single ExecCmd call.
-func (c *Client) responseErr(err error) {
-	t := time.NewTimer(responseErrTimeout)
-	defer t.Stop()
-
+func (c *Client) sendResponse(resp response) bool {
 	select {
-	case c.response <- response{err: err}:
-	case <-t.C:
+	case c.response <- resp:
+		return true
+	case <-c.done:
+		return false
 	}
 }
 
@@ -322,15 +309,11 @@ func (c *Client) workHandler() {
 		select {
 		case w := <-c.work:
 			if err := c.write([]byte(w)); c.fatalError(err) {
-				// Command send failed, inform the caller.
-				c.responseErr(err)
 				return
 			}
 		case <-time.After(c.keepAlive):
 			// Send a keep alive to prevent the connection from timing out.
 			if err := c.write(keepAliveData); c.fatalError(err) {
-				// We don't send to c.response as no ExecCmd is expecting a
-				// response and the next caller will get an error.
 				return
 			}
 		case <-c.done:
@@ -393,11 +376,14 @@ func (c *Client) ExecCmd(cmd *Cmd) ([]string, error) {
 			return nil, resp.err
 		}
 	case <-c.done:
+		if c.fatalErr != nil {
+			return nil, c.fatalErr
+		}
 		return nil, ErrNotConnected
 	case <-timer.C:
 		c.closeDone()
 		if err := c.conn.Close(); err != nil {
-			return nil, fmt.Errorf("%w: close connection: %v", ErrTimeout, err)
+			return nil, fmt.Errorf("%w: close connection: %s", ErrTimeout, err.Error())
 		}
 		return nil, ErrTimeout
 	}
