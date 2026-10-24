@@ -382,6 +382,75 @@ func testCmdsServer(t *testing.T, c *Client) {
 		assert.Equal(t, expected, clientz)
 	}
 
+	clientlistoptions := func(t *testing.T) {
+		t.Helper()
+		falseP, trueP := false, true
+		emptyCountry, country := "", "BE"
+		tests := []struct {
+			name        string
+			options     []string
+			away        bool
+			awayMessage string
+			ext         *OnlineClientExt
+		}{
+			{
+				name:        "away",
+				options:     []string{ClientAway},
+				away:        true,
+				awayMessage: "back soon",
+			},
+			{
+				name:    "voice",
+				options: []string{ClientVoice},
+				ext: &OnlineClientExt{
+					OnlineClientVoice: &OnlineClientVoice{
+						InputMuted:  &trueP,
+						OutputMuted: &falseP,
+					},
+				},
+			},
+			{
+				name:    "empty country",
+				options: []string{ClientCountry},
+				ext:     &OnlineClientExt{Country: &emptyCountry},
+			},
+			{
+				name:        "away voice country",
+				options:     []string{ClientAway, ClientVoice, ClientCountry},
+				away:        true,
+				awayMessage: "back soon",
+				ext: &OnlineClientExt{
+					OnlineClientVoice: &OnlineClientVoice{
+						InputMuted:  &falseP,
+						OutputMuted: &trueP,
+					},
+					Country: &country,
+				},
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				clients, err := c.Server.ClientList(tt.options...)
+				if !assert.NoError(t, err) {
+					return
+				}
+				expected := []*OnlineClient{
+					{
+						ID:              42087,
+						ChannelID:       39,
+						DatabaseID:      19,
+						Nickname:        "bdeb1337",
+						Type:            0,
+						Away:            tt.away,
+						AwayMessage:     tt.awayMessage,
+						OnlineClientExt: tt.ext,
+					},
+				}
+				assert.Equal(t, expected, clients)
+			})
+		}
+	}
+
 	clientdblist := func(t *testing.T) {
 		t.Helper()
 		clients, err := c.Server.ClientDBList()
@@ -422,6 +491,7 @@ func testCmdsServer(t *testing.T, c *Client) {
 		{"channellist", channellist},
 		{cmdClientList, clientlist},
 		{"clientlistextended", clientlistextended},
+		{"clientlistoptions", clientlistoptions},
 		{"clientdblist", clientdblist},
 	}
 
