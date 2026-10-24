@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCmdsServer(t *testing.T) {
@@ -428,4 +429,118 @@ func testCmdsServer(t *testing.T, c *Client) {
 	for _, tc := range tests {
 		t.Run(tc.name, tc.f)
 	}
+}
+
+func TestServerMethods_ClientList(t *testing.T) {
+	t.Run("tcp", func(t *testing.T) {
+		testClientListOptions(t, false)
+	})
+
+	t.Run("ssh", func(t *testing.T) {
+		testClientListOptions(t, true)
+	})
+}
+
+func testClientListOptions(t *testing.T, useSSHTransport bool) {
+	t.Helper()
+	setup := func(t *testing.T) (*server, *Client, *OnlineClient) {
+		t.Helper()
+		var (
+			serverOptions []serverOption
+			clientOptions = []func(*Client) error{Timeout(time.Second * 2)}
+		)
+
+		if useSSHTransport {
+			serverOptions = append(serverOptions, useSSH())
+			clientOptions = append(clientOptions, SSH(sshClientTestConfig))
+		}
+
+		s := newServer(t, serverOptions...)
+		c, err := NewClient(s.Addr, clientOptions...)
+		if err != nil {
+			require.NoError(t, s.Close())
+		}
+		require.NoError(t, err)
+
+		return s, c, &OnlineClient{
+			ID:         42087,
+			ChannelID:  39,
+			DatabaseID: 19,
+			Nickname:   "bdeb1337",
+			Type:       0,
+		}
+	}
+
+	t.Run("away", func(t *testing.T) {
+		s, c, expected := setup(t)
+		defer requireClientListClosed(t, s, c)
+		expected.Away = true
+		expected.AwayMessage = "back soon"
+		requireClientListSuccess(t, c, expected, ClientAway)
+	})
+
+	t.Run("voice", func(t *testing.T) {
+		s, c, expected := setup(t)
+		defer requireClientListClosed(t, s, c)
+		falseP, trueP := false, true
+		expected.OnlineClientExt = &OnlineClientExt{
+			OnlineClientVoice: &OnlineClientVoice{
+				InputMuted:  &trueP,
+				OutputMuted: &falseP,
+			},
+		}
+		requireClientListSuccess(t, c, expected, ClientVoice)
+	})
+
+	t.Run("empty-country", func(t *testing.T) {
+		s, c, expected := setup(t)
+		defer requireClientListClosed(t, s, c)
+		var country string
+		expected.OnlineClientExt = &OnlineClientExt{Country: &country}
+		requireClientListSuccess(t, c, expected, ClientCountry)
+	})
+
+	t.Run("away-voice-country", func(t *testing.T) {
+		s, c, expected := setup(t)
+		defer requireClientListClosed(t, s, c)
+		var (
+			falseP, trueP = false, true
+			country       = "BE"
+		)
+		expected.Away = true
+		expected.AwayMessage = "back soon"
+		expected.OnlineClientExt = &OnlineClientExt{
+			OnlineClientVoice: &OnlineClientVoice{
+				InputMuted:  &falseP,
+				OutputMuted: &trueP,
+			},
+			Country: &country,
+		}
+		requireClientListSuccess(t, c, expected, ClientAway, ClientVoice, ClientCountry)
+	})
+
+	t.Run("unsupported-option", func(t *testing.T) {
+		s, c, _ := setup(t)
+		defer requireClientListClosed(t, s, c)
+		var commandError *Error
+		clients, err := c.Server.ClientList(ClientAway, ClientVoice, ClientCountry, "-unsupported")
+		require.ErrorAs(t, err, &commandError)
+		require.Nil(t, clients)
+		require.Equal(t, &Error{ID: 256, Msg: "command not found"}, commandError)
+	})
+}
+
+func requireClientListSuccess(t *testing.T, c *Client, expected *OnlineClient, options ...string) {
+	t.Helper()
+	clients, err := c.Server.ClientList(options...)
+	require.NoError(t, err)
+	require.Equal(t, []*OnlineClient{expected}, clients)
+}
+
+func requireClientListClosed(t *testing.T, s *server, c *Client) {
+	t.Helper()
+	defer func() {
+		require.NoError(t, s.Close())
+	}()
+	require.NoError(t, c.Close())
 }
