@@ -29,7 +29,7 @@ type writeTimeoutConn struct {
 }
 
 func (c *writeTimeoutConn) Write(p []byte) (int, error) {
-	var (
+	var ( //nolint:gofumpt // mp-go requires grouped declarations, including single items.
 		deadline time.Time
 	)
 	if c.timeout != 0 {

@@ -39,7 +39,7 @@ func TestSSHConnectionReadAfterWriteDeadline(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			var (
+			var ( //nolint:gofumpt // mp-go requires grouped declarations, including single items.
 				serverConn net.Conn
 			)
 			s.mtx.Lock()
@@ -73,7 +73,7 @@ func TestSSHConnectionReadAfterWriteDeadline(t *testing.T) {
 	}
 }
 
-var (
+var ( //nolint:gofumpt // mp-go requires grouped declarations, including single items.
 	sshClientTestConfig = &ssh.ClientConfig{
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(), //nolint: gosec
 	}
@@ -169,7 +169,7 @@ func TestWriteTimeoutConnBlockedWrite(t *testing.T) {
 	}()
 	c := &writeTimeoutConn{timeout: 20 * time.Millisecond, Conn: conn}
 	_, err := c.Write([]byte("blocked"))
-	var (
+	var ( //nolint:gofumpt // mp-go requires grouped declarations, including single items.
 		netErr net.Error
 	)
 	require.ErrorAs(t, err, &netErr)
