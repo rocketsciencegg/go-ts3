@@ -5,8 +5,13 @@ import (
 	"time"
 )
 
-// DetailedOnlineClient contains the information returned by ClientInfo.
-// It is independent of the optional extensions returned by ClientList.
+const (
+	// maxClientInfoMilliseconds is the largest protocol duration that fits in time.Duration.
+	maxClientInfoMilliseconds = (1<<63 - 1) / int64(time.Millisecond)
+)
+
+// DetailedOnlineClient contains the information returned by [ServerMethods.ClientInfo].
+// It is independent of the optional extensions returned by [ServerMethods.ClientList].
 type DetailedOnlineClient struct {
 	ID          int    `ms:"-"`
 	ChannelID   int    `ms:"cid"`
@@ -21,7 +26,7 @@ type DetailedOnlineClient struct {
 	LastConnected time.Time `ms:"client_lastconnected"`
 	// TalkRequest is zero when the client has not requested permission to talk.
 	TalkRequest time.Time `ms:"-"`
-	// These durations are converted from protocol milliseconds by ClientInfo.
+	// These durations are converted from protocol milliseconds by [ServerMethods.ClientInfo].
 	IdleTime                time.Duration `ms:"-"`
 	ConnectionConnectedTime time.Duration `ms:"-"`
 
@@ -90,8 +95,9 @@ func (s *ServerMethods) ClientInfo(clientID int) (*DetailedOnlineClient, error) 
 	}
 
 	if response.TalkRequestSeconds < 0 {
-		return nil, fmt.Errorf("clientinfo: client_talk_request timestamp out of range: %d", response.TalkRequestSeconds)
+		return nil, fmt.Errorf("clientinfo: client_talk_request timestamp out of range: %q", fmt.Sprint(response.TalkRequestSeconds))
 	}
+
 	if response.TalkRequestSeconds > 0 {
 		response.TalkRequest = time.Unix(response.TalkRequestSeconds, 0)
 	}
@@ -103,8 +109,8 @@ func (s *ServerMethods) ClientInfo(clientID int) (*DetailedOnlineClient, error) 
 		{"client_idle_time", response.IdleMilliseconds},
 		{"connection_connected_time", response.ConnectedMilliseconds},
 	} {
-		if duration.value < 0 || duration.value > (1<<63-1)/int64(time.Millisecond) {
-			return nil, fmt.Errorf("clientinfo: %s milliseconds out of range: %d", duration.name, duration.value)
+		if duration.value < 0 || duration.value > maxClientInfoMilliseconds {
+			return nil, fmt.Errorf("clientinfo: %s milliseconds out of range: %q", duration.name, fmt.Sprint(duration.value))
 		}
 	}
 
