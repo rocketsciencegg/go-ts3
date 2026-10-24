@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCmdsServer(t *testing.T) {
@@ -41,6 +42,58 @@ func TestCmdsServerSSH(t *testing.T) {
 	}()
 
 	testCmdsServer(t, c)
+}
+
+func TestServerMethods_PrivilegeKeyAdd(t *testing.T) {
+	t.Run("tcp", func(t *testing.T) {
+		s := newServer(t)
+		defer func() {
+			require.NoError(t, s.Close())
+		}()
+
+		testPrivilegeKeyAdd(t, s.Addr)
+	})
+
+	t.Run("ssh", func(t *testing.T) {
+		s := newServer(t, useSSH())
+		defer func() {
+			require.NoError(t, s.Close())
+		}()
+
+		testPrivilegeKeyAdd(t, s.Addr, SSH(sshClientTestConfig))
+	})
+}
+
+func testPrivilegeKeyAdd(t *testing.T, addr string, options ...func(*Client) error) {
+	t.Helper()
+	setup := func(t *testing.T) *Client {
+		t.Helper()
+		clientOptions := append([]func(*Client) error{Timeout(time.Second * 2)}, options...)
+		c, err := NewClient(addr, clientOptions...)
+		require.NoError(t, err)
+		return c
+	}
+
+	t.Run("returns-created-token", func(t *testing.T) {
+		c := setup(t)
+		defer func() {
+			require.NoError(t, c.Close())
+		}()
+
+		token, err := c.Server.PrivilegeKeyAdd(0, 17395, 0)
+		require.NoError(t, err)
+		require.Equal(t, "zTfamFVhiMEzhTl49KrOVYaMilHPgQEBQOJFh6qX", token)
+	})
+
+	t.Run("returns-not-connected", func(t *testing.T) {
+		c := setup(t)
+		err := c.Close()
+		require.NoError(t, err)
+
+		token, err := c.Server.PrivilegeKeyAdd(0, 17395, 0)
+		require.ErrorIs(t, err, ErrNotConnected)
+		require.Empty(t, token)
+	})
 }
 
 func testCmdsServer(t *testing.T, c *Client) {
@@ -202,15 +255,6 @@ func testCmdsServer(t *testing.T, c *Client) {
 			},
 		}
 		assert.Equal(t, expected, keys)
-	}
-
-	privilegekeyadd := func(t *testing.T) {
-		t.Helper()
-		token, err := c.Server.PrivilegeKeyAdd(0, 17395, 0)
-		if !assert.NoError(t, err) {
-			return
-		}
-		assert.Equal(t, "zTfamFVhiMEzhTl49KrOVYaMilHPDQEBQOJFh6qX", token)
 	}
 
 	serverrequestconnectioninfo := func(t *testing.T) {
@@ -416,7 +460,6 @@ func testCmdsServer(t *testing.T, c *Client) {
 		{"stop", stop},
 		{"grouplist", grouplist},
 		{"privilegekeylist", privilegekeylist},
-		{"privilegekeyadd", privilegekeyadd},
 		{"serverrequestconnectioninfo", serverrequestconnectioninfo},
 		{"instanceinfo", instanceinfo},
 		{"channellist", channellist},
