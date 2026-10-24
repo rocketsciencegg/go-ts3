@@ -60,15 +60,17 @@ if err != nil {
 }
 for _, client := range clients {
 	log.Println(client.Nickname, client.Away, client.AwayMessage)
-	if client.OnlineClientExt != nil {
-		if client.Country != nil {
-			log.Println("country:", *client.Country)
-		}
-		if client.OnlineClientVoice != nil {
-			if client.InputMuted != nil && client.OutputMuted != nil {
-				log.Println("muted:", *client.InputMuted, *client.OutputMuted)
-			}
-		}
+	if client.OnlineClientExt == nil {
+		continue
+	}
+	if client.Country != nil {
+		log.Println("country:", *client.Country)
+	}
+	if client.OnlineClientVoice == nil {
+		continue
+	}
+	if client.InputMuted != nil && client.OutputMuted != nil {
+		log.Println("muted:", *client.InputMuted, *client.OutputMuted)
 	}
 }
 ```
