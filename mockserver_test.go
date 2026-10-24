@@ -77,6 +77,7 @@ type server struct {
 	failConn  bool
 	badHeader bool
 	useSSH    bool
+	responses map[string]string
 
 	// Below here is protected by mtx.
 	mtx    sync.Mutex
@@ -264,10 +265,13 @@ func (s *server) handle(conn net.Conn) {
 		cmd := strings.TrimSpace(parts[0])
 		// Support server commands with specific optional parameters,
 		// they can be bypassed from the usual parameter trimming here.
-		if cmd == cmdClientList {
+		if cmd == cmdClientList || cmd == "clientinfo" {
 			cmd = l
 		}
 		resp, ok := commands[cmd]
+		if response, found := s.responses[cmd]; found {
+			resp, ok = response, true
+		}
 		var err error
 		switch {
 		case ok:

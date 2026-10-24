@@ -1,0 +1,103 @@
+package ts3
+
+import (
+	"fmt"
+	"time"
+)
+
+// DetailedOnlineClient contains the information returned by ClientInfo.
+// It is independent of the optional extensions returned by ClientList.
+type DetailedOnlineClient struct {
+	ID          int    `ms:"-"`
+	ChannelID   int    `ms:"cid"`
+	DatabaseID  int    `ms:"client_database_id"`
+	Nickname    string `ms:"client_nickname"`
+	Type        int    `ms:"client_type"`
+	Away        bool   `ms:"client_away"`
+	AwayMessage string `ms:"client_away_message"`
+
+	Created       time.Time `ms:"client_created"`
+	LastConnected time.Time `ms:"client_lastconnected"`
+	// These durations are converted from protocol milliseconds by ClientInfo.
+	IdleTime                time.Duration `ms:"-"`
+	ConnectionConnectedTime time.Duration `ms:"-"`
+
+	Base64HashClientUID string `ms:"client_base64HashClientUID"`
+	ConnectionClientIP  string `ms:"connection_client_ip"`
+	Country             string `ms:"client_country"`
+	DefaultChannel      string `ms:"client_default_channel"`
+	DefaultToken        string `ms:"client_default_token"`
+	Description         string `ms:"client_description"`
+	LoginName           string `ms:"client_login_name"`
+	NicknamePhonetic    string `ms:"client_nickname_phonetic"`
+	SecurityHash        string `ms:"client_security_hash"`
+	TalkRequestMsg      string `ms:"client_talk_request_msg"`
+	UniqueIdentifier    string `ms:"client_unique_identifier"`
+	FlagAvatar          string `ms:"client_flag_avatar"`
+	Platform            string `ms:"client_platform"`
+	Version             string `ms:"client_version"`
+	VersionSign         string `ms:"client_version_sign"`
+
+	ConnectionBytesReceivedTotal               uint64 `ms:"connection_bytes_received_total"`
+	ConnectionBytesSentTotal                   uint64 `ms:"connection_bytes_sent_total"`
+	ConnectionPacketsReceivedTotal             uint64 `ms:"connection_packets_received_total"`
+	ConnectionPacketsSentTotal                 uint64 `ms:"connection_packets_sent_total"`
+	MonthBytesDownloaded                       uint64 `ms:"client_month_bytes_downloaded"`
+	MonthBytesUploaded                         uint64 `ms:"client_month_bytes_uploaded"`
+	TotalBytesDownloaded                       uint64 `ms:"client_total_bytes_downloaded"`
+	TotalBytesUploaded                         uint64 `ms:"client_total_bytes_uploaded"`
+	ConnectionFiletransferBandwidthSent        uint64 `ms:"connection_filetransfer_bandwidth_sent"`
+	ConnectionFiletransferBandwidthReceived    uint64 `ms:"connection_filetransfer_bandwidth_received"`
+	ConnectionBandwidthSentLastSecondTotal     uint64 `ms:"connection_bandwidth_sent_last_second_total"`
+	ConnectionBandwidthSentLastMinuteTotal     uint64 `ms:"connection_bandwidth_sent_last_minute_total"`
+	ConnectionBandwidthReceivedLastSecondTotal uint64 `ms:"connection_bandwidth_received_last_second_total"`
+	ConnectionBandwidthReceivedLastMinuteTotal uint64 `ms:"connection_bandwidth_received_last_minute_total"`
+	ChannelGroupID                             int    `ms:"client_channel_group_id"`
+	ChannelGroupInheritedChannelID             int    `ms:"client_channel_group_inherited_channel_id"`
+	NeededServerQueryViewPower                 int    `ms:"client_needed_serverquery_view_power"`
+	ServerGroups                               []int  `ms:"client_servergroups"`
+	TalkPower                                  int    `ms:"client_talk_power"`
+	TotalConnections                           int    `ms:"client_totalconnections"`
+	IconID                                     int64  `ms:"client_icon_id"`
+	InputHardware                              bool   `ms:"client_input_hardware"`
+	InputMuted                                 bool   `ms:"client_input_muted"`
+	IsChannelCommander                         bool   `ms:"client_is_channel_commander"`
+	IsPrioritySpeaker                          bool   `ms:"client_is_priority_speaker"`
+	IsRecording                                bool   `ms:"client_is_recording"`
+	OutputHardware                             bool   `ms:"client_output_hardware"`
+	OutputMuted                                bool   `ms:"client_output_muted"`
+	OutputOnlyMuted                            bool   `ms:"client_outputonly_muted"`
+	TalkRequest                                bool   `ms:"client_talk_request"`
+	IsTalker                                   bool   `ms:"client_is_talker"`
+}
+
+// ClientInfo returns detailed information about a single online client.
+// ID is taken from the request because the response does not include clid.
+// IdleTime and ConnectionConnectedTime are decoded from milliseconds.
+func (s *ServerMethods) ClientInfo(clientID int) (*DetailedOnlineClient, error) {
+	response := struct {
+		DetailedOnlineClient  `ms:",squash"`
+		IdleMilliseconds      int64 `ms:"client_idle_time"`
+		ConnectedMilliseconds int64 `ms:"connection_connected_time"`
+	}{}
+	if _, err := s.ExecCmd(NewCmd("clientinfo").WithArgs(NewArg("clid", clientID)).WithResponse(&response)); err != nil {
+		return nil, err
+	}
+
+	for _, duration := range []struct {
+		name  string
+		value int64
+	}{
+		{"client_idle_time", response.IdleMilliseconds},
+		{"connection_connected_time", response.ConnectedMilliseconds},
+	} {
+		if duration.value < 0 || duration.value > (1<<63-1)/int64(time.Millisecond) {
+			return nil, fmt.Errorf("clientinfo: %s milliseconds out of range: %d", duration.name, duration.value)
+		}
+	}
+
+	response.ID = clientID
+	response.IdleTime = time.Duration(response.IdleMilliseconds) * time.Millisecond
+	response.ConnectionConnectedTime = time.Duration(response.ConnectedMilliseconds) * time.Millisecond
+	return &response.DetailedOnlineClient, nil
+}
