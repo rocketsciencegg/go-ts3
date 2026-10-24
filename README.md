@@ -44,10 +44,6 @@ func main() {
 }
 ```
 
-Documentation
--------------
-- [GoDoc API Reference](http://godoc.org/github.com/multiplay/go-ts3).
-
 ### Detailed online client information
 
 Use `c.Server.ClientInfo(clientID)` after selecting a virtual server to retrieve
@@ -65,6 +61,10 @@ The detailed result is independent of `OnlineClient` and its optional
 extension for `ClientList`; it is not the detailed query method. Metadata and
 badges are not exposed by the detailed result. Conversion and server errors
 return a nil result and a non-nil error.
+
+Documentation
+-------------
+- [GoDoc API Reference](http://godoc.org/github.com/multiplay/go-ts3).
 
 License
 -------
