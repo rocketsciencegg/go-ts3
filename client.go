@@ -25,9 +25,6 @@ const (
 
 	// startBufSize is the initial size of allocation for the parse buffer.
 	startBufSize = 4096
-
-	// responseErrTimeout is the timeout used for sending response errors.
-	responseErrTimeout = time.Millisecond * 100
 )
 
 var (
@@ -72,18 +69,21 @@ type Client struct {
 	maxBufSize    int
 	notifyBufSize int
 	work          chan string
+	commandLock   chan struct{}
 	response      chan response
 	notify        chan Notification
 	closing       chan struct{} // closing is closed to indicate we're closing our connection.
 	done          chan struct{} // done is closed once we're seen a fatal error.
 	doneOnce      sync.Once
+	fatalErr      error // Published before done is closed.
 	connectHeader string
 	wg            sync.WaitGroup
 
 	Server *ServerMethods
 }
 
-// Timeout sets read / write / dial timeout for a TeamSpeak 3 Client.
+// Timeout sets the dial, write and command timeout for a TeamSpeak 3 Client.
+// The command timeout includes waiting for other commands to finish.
 func Timeout(timeout time.Duration) func(*Client) error {
 	return func(c *Client) error {
 		c.timeout = timeout
@@ -163,6 +163,7 @@ func NewClient(addr string, options ...func(c *Client) error) (*Client, error) {
 		maxBufSize:    MaxParseTokenSize,
 		notifyBufSize: DefaultNotifyBufSize,
 		work:          make(chan string),
+		commandLock:   make(chan struct{}, 1),
 		response:      make(chan response),
 		closing:       make(chan struct{}),
 		done:          make(chan struct{}),
@@ -227,7 +228,10 @@ func (c *Client) fatalError(err error) bool {
 		return false
 	}
 
-	c.closeDone()
+	c.doneOnce.Do(func() {
+		c.fatalErr = err
+		close(c.done)
+	})
 	return true
 }
 
@@ -249,57 +253,51 @@ func (c *Client) messageHandler() {
 	}()
 
 	buf := make([]string, 0, 10)
-	for {
-		if c.scanner.Scan() {
-			line := c.scanner.Text()
-			if line == "error id=0 msg=ok" {
-				var resp response
-				// Avoid creating a new buf if there was no data in the response.
-				if len(buf) > 0 {
-					resp.lines = buf
-					buf = make([]string, 0, 10)
+	for c.scanner.Scan() {
+		line := c.scanner.Text()
+		if line == "error id=0 msg=ok" {
+			resp := response{}
+			// Avoid creating a new buf if there was no data in the response.
+			if len(buf) > 0 {
+				resp.lines = buf
+				buf = make([]string, 0, 10)
+			}
+			if !c.sendResponse(resp) {
+				return
+			}
+		} else if matches := respTrailerRe.FindStringSubmatch(line); len(matches) == 4 {
+			if !c.sendResponse(response{err: NewError(matches)}) {
+				return
+			}
+			// Avoid creating a new buf if there was no data in the response.
+			if len(buf) > 0 {
+				buf = make([]string, 0, 10)
+			}
+		} else if strings.Index(line, "notify") == 0 {
+			if n, err := decodeNotification(line); err == nil {
+				// non-blocking write
+				select {
+				case c.notify <- n:
+				default:
 				}
-				c.response <- resp
-			} else if matches := respTrailerRe.FindStringSubmatch(line); len(matches) == 4 {
-				c.response <- response{err: NewError(matches)}
-				// Avoid creating a new buf if there was no data in the response.
-				if len(buf) > 0 {
-					buf = make([]string, 0, 10)
-				}
-			} else if strings.Index(line, "notify") == 0 {
-				if n, err := decodeNotification(line); err == nil {
-					// non-blocking write
-					select {
-					case c.notify <- n:
-					default:
-					}
-				}
-			} else {
-				// Partial response.
-				buf = append(buf, line)
 			}
 		} else {
-			if err := c.scanErr(); c.fatalError(err) {
-				c.responseErr(err)
-			} else {
-				// Ensure that done is closed as scanner has seen an io.EOF.
-				c.closeDone()
-			}
-			return
+			// Partial response.
+			buf = append(buf, line)
 		}
+	}
+	if !c.fatalError(c.scanErr()) {
+		// Ensure that done is closed as scanner has seen an io.EOF.
+		c.closeDone()
 	}
 }
 
-// responseErr sends err to c.response with a timeout to ensure it
-// doesn't block forever when multiple errors occur during the
-// processing of a single ExecCmd call.
-func (c *Client) responseErr(err error) {
-	t := time.NewTimer(responseErrTimeout)
-	defer t.Stop()
-
+func (c *Client) sendResponse(resp response) bool {
 	select {
-	case c.response <- response{err: err}:
-	case <-t.C:
+	case c.response <- resp:
+		return true
+	case <-c.done:
+		return false
 	}
 }
 
@@ -311,15 +309,11 @@ func (c *Client) workHandler() {
 		select {
 		case w := <-c.work:
 			if err := c.write([]byte(w)); c.fatalError(err) {
-				// Command send failed, inform the caller.
-				c.responseErr(err)
 				return
 			}
 		case <-time.After(c.keepAlive):
 			// Send a keep alive to prevent the connection from timing out.
 			if err := c.write(keepAliveData); c.fatalError(err) {
-				// We don't send to c.response as no ExecCmd is expecting a
-				// response and the next caller will get an error.
 				return
 			}
 		case <-c.done:
@@ -347,20 +341,57 @@ func (c *Client) Exec(cmd string) ([]string, error) {
 }
 
 // ExecCmd executes cmd on the server and returns the response.
+// Concurrent calls are serialized so each command receives its own response.
+// If a sent command times out, the connection is closed because a late response
+// cannot safely be associated with a subsequent command.
 func (c *Client) ExecCmd(cmd *Cmd) ([]string, error) {
+	var (
+		timer = time.NewTimer(c.timeout)
+		resp  response
+	)
+	defer timer.Stop()
+
+	select {
+	case c.commandLock <- struct{}{}:
+		defer func() { <-c.commandLock }()
+	case <-c.done:
+		return nil, ErrNotConnected
+	case <-timer.C:
+		return nil, ErrTimeout
+	}
+
+	if !c.IsConnected() {
+		return nil, ErrNotConnected
+	}
+
 	select {
 	case c.work <- cmd.String():
 	case <-c.done:
 		return nil, ErrNotConnected
+	case <-timer.C:
+		return nil, ErrTimeout
 	}
 
-	var resp response
 	select {
 	case resp = <-c.response:
 		if resp.err != nil {
 			return nil, resp.err
 		}
-	case <-time.After(c.timeout):
+	case <-c.done:
+		if c.fatalErr != nil {
+			return nil, c.fatalErr
+		}
+		return nil, ErrNotConnected
+	case <-timer.C:
+		c.closeDone()
+		closeConn := c.conn.Close
+		if conn, ok := c.conn.(*sshConnection); ok {
+			// A graceful SSH channel close can wait behind a blocked write.
+			closeConn = conn.Conn.Close
+		}
+		if err := closeConn(); err != nil {
+			return nil, fmt.Errorf("close timed-out connection: %s: %w", err.Error(), ErrTimeout)
+		}
 		return nil, ErrTimeout
 	}
 
