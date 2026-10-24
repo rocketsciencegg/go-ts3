@@ -72,6 +72,7 @@ type Client struct {
 	maxBufSize    int
 	notifyBufSize int
 	work          chan string
+	commandLock   chan struct{}
 	response      chan response
 	notify        chan Notification
 	closing       chan struct{} // closing is closed to indicate we're closing our connection.
@@ -83,7 +84,8 @@ type Client struct {
 	Server *ServerMethods
 }
 
-// Timeout sets read / write / dial timeout for a TeamSpeak 3 Client.
+// Timeout sets the dial, write and command timeout for a TeamSpeak 3 Client.
+// The command timeout includes waiting for other commands to finish.
 func Timeout(timeout time.Duration) func(*Client) error {
 	return func(c *Client) error {
 		c.timeout = timeout
@@ -163,6 +165,7 @@ func NewClient(addr string, options ...func(c *Client) error) (*Client, error) {
 		maxBufSize:    MaxParseTokenSize,
 		notifyBufSize: DefaultNotifyBufSize,
 		work:          make(chan string),
+		commandLock:   make(chan struct{}, 1),
 		response:      make(chan response),
 		closing:       make(chan struct{}),
 		done:          make(chan struct{}),
@@ -259,9 +262,17 @@ func (c *Client) messageHandler() {
 					resp.lines = buf
 					buf = make([]string, 0, 10)
 				}
-				c.response <- resp
+				select {
+				case c.response <- resp:
+				case <-c.done:
+					return
+				}
 			} else if matches := respTrailerRe.FindStringSubmatch(line); len(matches) == 4 {
-				c.response <- response{err: NewError(matches)}
+				select {
+				case c.response <- response{err: NewError(matches)}:
+				case <-c.done:
+					return
+				}
 				// Avoid creating a new buf if there was no data in the response.
 				if len(buf) > 0 {
 					buf = make([]string, 0, 10)
@@ -347,11 +358,32 @@ func (c *Client) Exec(cmd string) ([]string, error) {
 }
 
 // ExecCmd executes cmd on the server and returns the response.
+// Concurrent calls are serialized so each command receives its own response.
+// If a sent command times out, the connection is closed because a late response
+// cannot safely be associated with a subsequent command.
 func (c *Client) ExecCmd(cmd *Cmd) ([]string, error) {
+	timer := time.NewTimer(c.timeout)
+	defer timer.Stop()
+
+	select {
+	case c.commandLock <- struct{}{}:
+		defer func() { <-c.commandLock }()
+	case <-c.done:
+		return nil, ErrNotConnected
+	case <-timer.C:
+		return nil, ErrTimeout
+	}
+
+	if !c.IsConnected() {
+		return nil, ErrNotConnected
+	}
+
 	select {
 	case c.work <- cmd.String():
 	case <-c.done:
 		return nil, ErrNotConnected
+	case <-timer.C:
+		return nil, ErrTimeout
 	}
 
 	var resp response
@@ -360,7 +392,13 @@ func (c *Client) ExecCmd(cmd *Cmd) ([]string, error) {
 		if resp.err != nil {
 			return nil, resp.err
 		}
-	case <-time.After(c.timeout):
+	case <-c.done:
+		return nil, ErrNotConnected
+	case <-timer.C:
+		c.closeDone()
+		if err := c.conn.Close(); err != nil {
+			return nil, fmt.Errorf("%w: close connection: %v", ErrTimeout, err)
+		}
 		return nil, ErrTimeout
 	}
 
