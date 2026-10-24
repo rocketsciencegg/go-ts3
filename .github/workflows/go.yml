@@ -28,7 +28,6 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
           check-latest: true
-          cache: true
           cache-dependency-path: go.sum
 
       - name: Go Build
