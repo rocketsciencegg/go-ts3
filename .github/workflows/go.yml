@@ -14,61 +14,34 @@ jobs:
   go:
     strategy:
       matrix:
-        go: [1.19]
-        golangcli: [v1.50.1]
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        go: ['stable']
+        golangci: [v2.15.0]
+        os: [ubuntu-latest]
     name: lint
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Setup
-        uses: actions/setup-go@v3
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ matrix.go }}
-
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Go Cache Paths
-        id: go-cache-paths
-        shell: bash
-        run: |
-          echo "GOCACHE=$(go env GOCACHE)" >> $GITHUB_OUTPUT
-          echo "GOMODCACHE=$(go env GOMODCACHE)" >> $GITHUB_OUTPUT
-
-      - name: Go Build Cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ steps.go-cache-paths.outputs.GOCACHE }}
-          key: ${{ runner.os }}-GOCACHE-${{ hashFiles('**/go.sum') }}
-
-      - name: Go Mod Cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ steps.go-cache-paths.outputs.GOMODCACHE }}
-          key: ${{ runner.os }}-GOMODCACHE-${{ hashFiles('**/go.sum') }}
-
-      - name: Go Lint Standard
-        if: runner.os != 'Windows'
-        uses: golangci/golangci-lint-action@v3
-        with:
-          version: ${{ matrix.golangci }}
-          args: "--out-${NO_FUTURE}format colored-line-number"
-          skip-pkg-cache: true
-          skip-build-cache: true
-
-      - name: Go Lint Windows
-        if: runner.os == 'Windows'
-        uses: golangci/golangci-lint-action@v3
-        env:
-          outformat: out-format
-        with:
-          version: ${{ matrix.golangci }}
-          args: "--%outformat% colored-line-number --timeout 2m"
-          skip-pkg-cache: true
-          skip-build-cache: true
+          check-latest: true
+          cache-dependency-path: go.sum
 
       - name: Go Build
         run: go build ./...
 
       - name: Go Test
         run: go test -race -v ./...
+
+      - name: Go Lint Standard
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ matrix.golangci }}
+
+      - name: Go Format
+        run: |
+          golangci-lint fmt
+          git diff --exit-code -- '*.go'

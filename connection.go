@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"strconv"
 	"strings"
@@ -66,7 +67,9 @@ func (c *sshConnection) Connect(addr string, timeout time.Duration) error {
 	// Reject all channel requests.
 	go func(newChannel <-chan ssh.NewChannel) {
 		for channel := range newChannel {
-			channel.Reject(ssh.Prohibited, ssh.Prohibited.String()) //nolint: errcheck
+			if err := channel.Reject(ssh.Prohibited, ssh.Prohibited.String()); err != nil {
+				slog.Error("ssh connection: reject channel", "error", err)
+			}
 		}
 	}(chans)
 

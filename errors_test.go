@@ -57,7 +57,7 @@ func TestNewError(t *testing.T) {
 
 func TestNewInvalidResponseError(t *testing.T) {
 	reason := "my reason"
-	lines := []string{"line1"}
+	lines := []string{testLine1}
 	err := NewInvalidResponseError(reason, lines)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), err.Reason)

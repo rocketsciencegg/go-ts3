@@ -12,8 +12,8 @@ func TestCmd(t *testing.T) {
 		expect string
 	}{
 		"cmd": {
-			NewCmd("version"),
-			"version",
+			NewCmd(cmdVersion),
+			cmdVersion,
 		},
 		"arg": {
 			NewCmd("use").
