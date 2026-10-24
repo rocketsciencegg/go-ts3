@@ -134,16 +134,7 @@ func TestClientInfo(t *testing.T) {
 
 					got, err := c.Server.ClientInfo(8)
 					if tc.wantErr != "" {
-						require.ErrorContains(t, err, tc.wantErr)
-						require.ErrorContains(t, err, "clientinfo:")
-						require.Nil(t, got)
-						if tc.wantServerErr {
-							var (
-								serverErr *Error
-							)
-							require.ErrorAs(t, err, &serverErr)
-							require.Equal(t, 256, serverErr.ID)
-						}
+						requireClientInfoError(t, got, err, tc.wantErr, tc.wantServerErr)
 						return
 					}
 					require.NoError(t, err)
@@ -152,6 +143,20 @@ func TestClientInfo(t *testing.T) {
 			}
 		})
 	}
+}
+
+func requireClientInfoError(t *testing.T, got *DetailedOnlineClient, err error, want string, wantServerErr bool) {
+	t.Helper()
+	require.ErrorContains(t, err, want)
+	require.ErrorContains(t, err, "clientinfo:")
+	require.Nil(t, got)
+	if !wantServerErr {
+		return
+	}
+
+	var serverErr *Error
+	require.ErrorAs(t, err, &serverErr)
+	require.Equal(t, 256, serverErr.ID)
 }
 
 func TestClientInfoNotConnected(t *testing.T) {
