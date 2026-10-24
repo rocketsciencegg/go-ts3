@@ -84,6 +84,8 @@ type Client struct {
 }
 
 // Timeout sets read / write / dial timeout for a TeamSpeak 3 Client.
+// With SSH, the write timeout also applies to protocol writes triggered by reads.
+// Waiting for notifications does not itself have a read timeout.
 func Timeout(timeout time.Duration) func(*Client) error {
 	return func(c *Client) error {
 		c.timeout = timeout

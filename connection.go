@@ -21,6 +21,27 @@ const (
 	DefaultSSHPort = 10022
 )
 
+// writeTimeoutConn refreshes deadlines even for SSH window adjustments during reads.
+type writeTimeoutConn struct {
+	net.Conn
+	timeout time.Duration
+}
+
+func (c *writeTimeoutConn) Write(p []byte) (int, error) {
+	var deadline time.Time
+	if c.timeout != 0 {
+		deadline = time.Now().Add(c.timeout)
+	}
+	if err := c.Conn.SetWriteDeadline(deadline); err != nil {
+		return 0, fmt.Errorf("write timeout connection: set write deadline: %w", err)
+	}
+	n, err := c.Conn.Write(p)
+	if err != nil {
+		return n, fmt.Errorf("write timeout connection: write: %w", err)
+	}
+	return n, nil
+}
+
 // legacyConnection is an insecure TCP connection.
 type legacyConnection struct {
 	net.Conn
@@ -48,15 +69,20 @@ type sshConnection struct {
 }
 
 // Connect connects to the address with the given timeout and opens a new SSH channel with attached shell.
+// The timeout applies to dialing and each underlying write, including SSH protocol
+// writes triggered by reading from the channel. A zero timeout disables these limits.
 func (c *sshConnection) Connect(addr string, timeout time.Duration) error {
 	addr, err := verifyAddr(addr, DefaultSSHPort)
 	if err != nil {
 		return err
 	}
 
-	if c.Conn, err = net.DialTimeout("tcp", addr, timeout); err != nil {
+	conn, err := net.DialTimeout("tcp", addr, timeout)
+	if err != nil {
 		return fmt.Errorf("ssh connection: dial: %w", err)
 	}
+
+	c.Conn = &writeTimeoutConn{Conn: conn, timeout: timeout}
 
 	clientConn, chans, reqs, err := ssh.NewClientConn(c.Conn, addr, c.config)
 	if err != nil {
