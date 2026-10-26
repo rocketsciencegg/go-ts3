@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const onlineClientTestNickname = "bdeb1337"
+
 func TestCmdsServer(t *testing.T) {
 	s := newServer(t)
 	defer func() {
@@ -310,7 +312,7 @@ func testCmdsServer(t *testing.T, c *Client) {
 				ID:         42087,
 				ChannelID:  39,
 				DatabaseID: 19,
-				Nickname:   "bdeb1337",
+				Nickname:   onlineClientTestNickname,
 				Type:       0,
 			},
 		}
@@ -340,7 +342,7 @@ func testCmdsServer(t *testing.T, c *Client) {
 				ID:          42087,
 				ChannelID:   39,
 				DatabaseID:  19,
-				Nickname:    "bdeb1337",
+				Nickname:    onlineClientTestNickname,
 				Type:        0,
 				Away:        true,
 				AwayMessage: "afk",
@@ -466,7 +468,7 @@ func testClientListOptions(t *testing.T, useSSHTransport bool) {
 			ID:         42087,
 			ChannelID:  39,
 			DatabaseID: 19,
-			Nickname:   "bdeb1337",
+			Nickname:   onlineClientTestNickname,
 			Type:       0,
 		}
 	}
