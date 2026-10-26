@@ -76,7 +76,7 @@ func TestClientNilOption(t *testing.T) {
 
 func TestClientOptionError(t *testing.T) {
 	errBadOption := errors.New("bad option")
-	_, err := NewClient("", func(c *Client) error { return errBadOption })
+	_, err := NewClient("", func(_ *Client) error { return errBadOption })
 	if !assert.Error(t, err) {
 		return
 	}

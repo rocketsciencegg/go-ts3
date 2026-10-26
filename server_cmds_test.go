@@ -55,7 +55,7 @@ func testCmdsServer(t *testing.T, c *Client) {
 			{
 				ID:                 1,
 				Port:               10677,
-				Status:             "online",
+				Status:             statusOnline,
 				ClientsOnline:      1,
 				QueryClientsOnline: 1,
 				MaxClients:         35,
@@ -68,7 +68,7 @@ func testCmdsServer(t *testing.T, c *Client) {
 			{
 				ID:                 2,
 				Port:               10617,
-				Status:             "online",
+				Status:             statusOnline,
 				ClientsOnline:      3,
 				QueryClientsOnline: 2,
 				MaxClients:         10,
@@ -132,7 +132,7 @@ func testCmdsServer(t *testing.T, c *Client) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		expected := &CreatedServer{
+		expected := &CreatedServer{ //nolint:gosec // Public mock-server response, not a real credential.
 			ID:    2,
 			Port:  9988,
 			Token: "eKnFZQ9EK7G7MhtuQB6+N2B1PNZZ6OZL3ycDp2OW",
@@ -195,7 +195,7 @@ func testCmdsServer(t *testing.T, c *Client) {
 		}
 
 		expected := []*PrivilegeKey{
-			{
+			{ //nolint:gosec // Public mock-server response, not a real credential.
 				Token:   "zTfamFVhiMEzhTl49KrOVYaMilHPDQEBQOJFh6qX",
 				ID1:     17395,
 				Created: 1499948005,
@@ -420,7 +420,7 @@ func testCmdsServer(t *testing.T, c *Client) {
 		{"serverrequestconnectioninfo", serverrequestconnectioninfo},
 		{"instanceinfo", instanceinfo},
 		{"channellist", channellist},
-		{"clientlist", clientlist},
+		{cmdClientList, clientlist},
 		{"clientlistextended", clientlistextended},
 		{"clientdblist", clientdblist},
 	}

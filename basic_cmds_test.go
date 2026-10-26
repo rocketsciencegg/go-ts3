@@ -84,7 +84,7 @@ func testCmdsBasic(t *testing.T, c *Client) {
 		}
 
 		expected := &ConnectionInfo{
-			ServerStatus:           "online",
+			ServerStatus:           statusOnline,
 			ServerID:               18,
 			ServerUniqueIdentifier: "gNITtWtKs9+Uh3L4LKv8/YHsn5c=",
 			ServerPort:             9987,
@@ -105,7 +105,7 @@ func testCmdsBasic(t *testing.T, c *Client) {
 		f    func(t *testing.T)
 	}{
 		{"auth", auth},
-		{"version", version},
+		{cmdVersion, version},
 		{"useid", useID},
 		{"useport", usePort},
 		{"whoami", whoami},

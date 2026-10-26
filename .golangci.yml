@@ -1,39 +1,48 @@
+version: "2"
 linters:
   enable:
-    - errcheck
-    - ineffassign
-    - unused
-    - typecheck
     - bodyclose
     - depguard
     - dogsled
     - dupl
+    - dupword
+    - errorlint
     - gochecknoinits
+    - gocognit
     - goconst
     - gocritic
     - gocyclo
-    - gofmt
-    - goimports
-    - revive
+    - godot
     - gosec
-    - gosimple
     - misspell
     - nakedret
-    - prealloc
-    - staticcheck
-    - stylecheck
-    - unconvert
-    - unparam
-    - unused
-    - whitespace
-    - govet
-    - gocognit
-    - dupword
-    - errorlint
-    - godot
-    - gofumpt
     - nolintlint
     - nosprintfhostport
-    - tenv
+    - prealloc
+    - revive
+    - staticcheck
     - thelper
+    - unconvert
+    - unparam
+    - whitespace
     - wrapcheck
+  settings:
+    gocognit:
+      min-complexity: 45
+    depguard:
+      rules:
+        main:
+          allow:
+            - $gostd
+            - github.com/mitchellh/mapstructure
+            - github.com/stretchr/testify
+            - golang.org/x/crypto
+  exclusions:
+    generated: strict
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: strict
