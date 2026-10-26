@@ -25,6 +25,9 @@ const (
 	errUnknownCmd = `error id=256 msg=command\snot\sfound`
 	errOK         = `error id=0 msg=ok`
 
+	// onlineClientTestNickname matches the client list response fixtures.
+	onlineClientTestNickname = "bdeb1337"
+
 	// only used for testing.
 	sshPrivateServerKey = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAaAAAABNlY2RzYS\n1zaGEyLW5pc3RwMjU2AAAACG5pc3RwMjU2AAAAQQRamQdnvjuFVMSN3wpq246IZxO9kS0y\n0f54xgj47XwyPUvhbpk27Ot6Z6CkqvLnj05pNQK6j7XJPkVoym16tiSLAAAAsOwJzensCc\n3pAAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFqZB2e+O4VUxI3f\nCmrbjohnE72RLTLR/njGCPjtfDI9S+FumTbs63pnoKSq8uePTmk1ArqPtck+RWjKbXq2JI\nsAAAAhAIVVOJZP3A2+tO26RnAXBAaD6aPpDfr1QgoeFz2Rd7E2AAAAFmZlcmRpbmFuZEBG\nZXJkaW5hbmQtUEMB\n-----END OPENSSH PRIVATE KEY-----"
 )

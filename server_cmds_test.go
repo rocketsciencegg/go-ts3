@@ -8,11 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	// onlineClientTestNickname matches the client list response fixtures.
-	onlineClientTestNickname = "bdeb1337"
-)
-
 func TestCmdsServer(t *testing.T) {
 	s := newServer(t)
 	defer func() {
