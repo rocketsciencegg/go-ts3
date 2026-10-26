@@ -6,7 +6,9 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -130,41 +132,48 @@ func TestWriteTimeoutConn_Write(t *testing.T) {
 	}
 
 	t.Run("success", func(t *testing.T) {
-		c, conn := setup(t)
-		requireWriteTimeoutSuccess(t, c, conn, 1)
+		synctest.Test(t, func(t *testing.T) {
+			c, conn := setup(t)
+			requireWriteTimeoutSuccess(t, c, conn, 1)
+		})
 	})
 
 	t.Run("refreshes-each-write", func(t *testing.T) {
-		c, conn := setup(t)
-		requireWriteTimeoutSuccess(t, c, conn, 1)
-		requireWriteTimeoutSuccess(t, c, conn, 2)
+		synctest.Test(t, func(t *testing.T) {
+			c, conn := setup(t)
+			requireWriteTimeoutSuccess(t, c, conn, 1)
+			time.Sleep(time.Second)
+			requireWriteTimeoutSuccess(t, c, conn, 2)
+		})
 	})
 
 	t.Run("deadline-failure", func(t *testing.T) {
-		c, conn := setup(t)
-		errDeadline := errors.New("deadline failure")
-		conn.deadlineErr = errDeadline
-		before := time.Now()
-		n, err := c.Write([]byte("abc"))
-		require.ErrorIs(t, err, errDeadline)
-		require.EqualError(t, err, "set write deadline: deadline failure")
-		require.Zero(t, n)
-		require.Zero(t, conn.writes)
-		requireWriteDeadline(t, conn.deadline, before, c.timeout)
+		synctest.Test(t, func(t *testing.T) {
+			c, conn := setup(t)
+			errDeadline := errors.New("deadline failure")
+			conn.deadlineErr = errDeadline
+			n, err := c.Write([]byte("abc"))
+			require.ErrorIs(t, err, errDeadline)
+			require.EqualError(t, err, "set write deadline: deadline failure")
+			require.Zero(t, n)
+			require.Zero(t, conn.writes)
+			require.Equal(t, time.Now().Add(c.timeout), conn.deadline)
+		})
 	})
 
 	t.Run("partial-write", func(t *testing.T) {
-		c, conn := setup(t)
-		errWrite := errors.New("write failure")
-		conn.writeErr = errWrite
-		conn.written = len("ab")
-		before := time.Now()
-		n, err := c.Write([]byte("abc"))
-		require.ErrorIs(t, err, errWrite)
-		require.EqualError(t, err, "write: write failure")
-		require.Equal(t, len("ab"), n)
-		require.Equal(t, 1, conn.writes)
-		requireWriteDeadline(t, conn.deadline, before, c.timeout)
+		synctest.Test(t, func(t *testing.T) {
+			c, conn := setup(t)
+			errWrite := errors.New("write failure")
+			conn.writeErr = errWrite
+			conn.written = len("ab")
+			n, err := c.Write([]byte("abc"))
+			require.ErrorIs(t, err, errWrite)
+			require.EqualError(t, err, "write: write failure")
+			require.Equal(t, len("ab"), n)
+			require.Equal(t, 1, conn.writes)
+			require.Equal(t, time.Now().Add(c.timeout), conn.deadline)
+		})
 	})
 
 	t.Run("zero-timeout", func(t *testing.T) {
@@ -178,12 +187,11 @@ func TestWriteTimeoutConn_Write(t *testing.T) {
 func requireWriteTimeoutSuccess(t *testing.T, c *writeTimeoutConn, conn *writeDeadlineConn, writes int) {
 	t.Helper()
 	previous := conn.deadline
-	before := time.Now()
 	n, err := c.Write([]byte("abc"))
 	require.NoError(t, err)
 	require.Equal(t, len("abc"), n)
 	require.Equal(t, writes, conn.writes)
-	requireWriteDeadline(t, conn.deadline, before, c.timeout)
+	require.Equal(t, time.Now().Add(c.timeout), conn.deadline)
 	require.True(t, conn.deadline.After(previous))
 }
 
@@ -194,12 +202,6 @@ func requireUnlimitedWriteSuccess(t *testing.T, c *writeTimeoutConn, conn *write
 	require.Equal(t, len("abc"), n)
 	require.Equal(t, writes, conn.writes)
 	require.True(t, conn.deadline.IsZero())
-}
-
-func requireWriteDeadline(t *testing.T, deadline, before time.Time, timeout time.Duration) {
-	t.Helper()
-	require.False(t, deadline.Before(before.Add(timeout)))
-	require.False(t, deadline.After(time.Now().Add(timeout)))
 }
 
 func TestWriteTimeoutConn_BlockedWrite(t *testing.T) {
@@ -215,6 +217,44 @@ func TestWriteTimeoutConn_BlockedWrite(t *testing.T) {
 	_, err := c.Write([]byte("blocked"))
 	require.ErrorAs(t, err, &netErr)
 	require.True(t, netErr.Timeout())
+}
+
+func TestWriteTimeoutConn_NegativeTimeout(t *testing.T) {
+	conn, peer := net.Pipe()
+	t.Cleanup(func() {
+		require.NoError(t, conn.Close())
+		require.NoError(t, peer.Close())
+	})
+	c := &writeTimeoutConn{timeout: -time.Second, Conn: conn}
+	n, err := c.Write([]byte("expired"))
+	require.ErrorIs(t, err, os.ErrDeadlineExceeded)
+	require.Zero(t, n)
+}
+
+func TestSSHConnection_CloseAfterWriteDeadline(t *testing.T) {
+	s := newServer(t, useSSH())
+	t.Cleanup(func() {
+		require.NoError(t, s.Close())
+	})
+	c := &sshConnection{config: sshClientTestConfig}
+	err := c.Connect(s.Addr, time.Second)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		if err := c.Conn.Close(); err != nil {
+			require.ErrorIs(t, err, net.ErrClosed)
+		}
+	})
+	reader := bufio.NewReader(c)
+	err = c.SetReadDeadline(time.Now().Add(connectionTestTimeout))
+	require.NoError(t, err)
+	_, err = reader.ReadString('\r')
+	require.NoError(t, err)
+	_, err = reader.ReadString('\r')
+	require.NoError(t, err)
+	err = c.SetWriteDeadline(time.Now().Add(-time.Second))
+	require.NoError(t, err)
+	err = c.Close()
+	require.NoError(t, err)
 }
 
 func TestConnection(t *testing.T) {

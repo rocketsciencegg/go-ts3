@@ -36,7 +36,7 @@ func (c *writeTimeoutConn) Write(p []byte) (int, error) {
 		deadline = time.Now().Add(c.timeout)
 	}
 
-	if err := c.Conn.SetWriteDeadline(deadline); err != nil {
+	if err := c.SetWriteDeadline(deadline); err != nil {
 		return 0, fmt.Errorf("set write deadline: %w", err)
 	}
 
