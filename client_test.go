@@ -8,11 +8,16 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh"
+)
+
+const (
+	invalidCommand = "invalid"
 )
 
 type concurrentCommandResult struct {
@@ -317,8 +322,6 @@ func TestClientBadHeader(t *testing.T) {
 	assert.NoError(t, c.Close())
 }
 
-const invalidCommand = "invalid"
-
 func TestConcurrency(t *testing.T) {
 	setup := func(t *testing.T, serverOptions []serverOption, options ...func(*Client) error) (*Client, *server) {
 		t.Helper()
@@ -419,25 +422,20 @@ func requireConcurrentCommandError(t *testing.T, result concurrentCommandResult)
 }
 
 func TestClientWorkTimeout(t *testing.T) {
-	c := &Client{
-		timeout:     20 * time.Millisecond,
-		work:        make(chan string),
-		commandLock: make(chan struct{}, 1),
-		done:        make(chan struct{}),
-	}
-	defer c.closeDone()
-	result := make(chan error, 1)
-	go func() {
+	synctest.Test(t, func(t *testing.T) {
+		c := &Client{
+			timeout:     20 * time.Millisecond,
+			work:        make(chan string),
+			commandLock: make(chan struct{}, 1),
+			done:        make(chan struct{}),
+		}
+		defer c.closeDone()
+		start := time.Now()
 		_, err := c.Exec("version")
-		result <- err
-	}()
-	select {
-	case err := <-result:
 		require.ErrorIs(t, err, ErrTimeout)
+		require.Equal(t, start.Add(c.timeout), time.Now())
 		require.True(t, c.IsConnected(), "an unsent command must not invalidate the connection")
-	case <-time.After(time.Second):
-		require.FailNow(t, "command submission did not time out")
-	}
+	})
 }
 
 func TestClientQueuedCommand(t *testing.T) {
@@ -453,21 +451,29 @@ func TestClientQueuedCommand(t *testing.T) {
 	}
 
 	t.Run("timeout", func(t *testing.T) {
-		c := setup()
-		defer c.closeDone()
+		synctest.Test(t, func(t *testing.T) {
+			c := setup()
+			defer c.closeDone()
 
-		requireQueuedCommandError(t, c, ErrTimeout)
-		require.True(t, c.IsConnected())
-		<-c.commandLock
+			start := time.Now()
+			requireQueuedCommandError(t, c, ErrTimeout)
+			require.Equal(t, start.Add(c.timeout), time.Now())
+			require.True(t, c.IsConnected())
+			<-c.commandLock
+		})
 	})
 
 	t.Run("disconnect", func(t *testing.T) {
-		c := setup()
-		c.closeDone()
+		synctest.Test(t, func(t *testing.T) {
+			c := setup()
+			c.closeDone()
 
-		requireQueuedCommandError(t, c, ErrNotConnected)
-		require.False(t, c.IsConnected())
-		<-c.commandLock
+			start := time.Now()
+			requireQueuedCommandError(t, c, ErrNotConnected)
+			require.Equal(t, start, time.Now())
+			require.False(t, c.IsConnected())
+			<-c.commandLock
+		})
 	})
 }
 

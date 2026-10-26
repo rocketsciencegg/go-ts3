@@ -292,6 +292,7 @@ func (c *Client) messageHandler() {
 	}
 }
 
+// sendResponse delivers a response unless the connection has terminated.
 func (c *Client) sendResponse(resp response) bool {
 	select {
 	case c.response <- resp:
