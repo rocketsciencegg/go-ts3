@@ -8,9 +8,24 @@ Features
 
 Installation
 ------------
+Requires Go 1.26 or later.
+
 ```sh
 go get -u github.com/multiplay/go-ts3
 ```
+
+Concurrency and timeouts
+------------------------
+Commands on a client may be called from multiple goroutines. Each complete
+command/response exchange is serialized so responses are returned to the correct
+caller. Callers must not concurrently modify a shared command or response target.
+
+The `Timeout` option bounds a command, including time spent waiting for another
+command to finish. A timeout before sending leaves the connection usable. If a
+sent command times out, the client closes the connection to prevent a late
+response from being returned to a later command. Create a new client to reconnect.
+Subsequent commands on the disconnected client return `ErrNotConnected`.
+`Close` on an already disconnected client also returns `ErrNotConnected`.
 
 Examples
 --------
