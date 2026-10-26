@@ -81,6 +81,39 @@ Documentation
 -------------
 - [GoDoc API Reference](http://godoc.org/github.com/multiplay/go-ts3).
 
+### Optional client information
+
+`c.Server.ClientList()` requests only the basic client list. Select additional
+information explicitly rather than requesting every extension on every call:
+
+```go
+clients, err := c.Server.ClientList(ts3.ClientAway, ts3.ClientVoice, ts3.ClientCountry)
+if err != nil {
+	log.Fatal(err)
+}
+for _, client := range clients {
+	log.Println(client.Nickname, client.Away, client.AwayMessage)
+	if client.OnlineClientExt == nil {
+		continue
+	}
+	if client.Country != nil {
+		log.Println("country:", *client.Country)
+	}
+	if client.OnlineClientVoice == nil {
+		continue
+	}
+	if client.InputMuted != nil && client.OutputMuted != nil {
+		log.Println("muted:", *client.InputMuted, *client.OutputMuted)
+	}
+}
+```
+
+`ClientList(ts3.ClientListFull)` requests all supported extensions. Country and
+voice fields are pointers: `nil` means the field was not returned, while a
+non-nil pointer can contain an empty country or a `false` mute status. Check the
+embedded extension pointers before accessing their fields. `Away` and
+`AwayMessage` retain their non-pointer types for compatibility.
+
 License
 -------
 go-ts3 is available under the [BSD 2-Clause License](https://opensource.org/licenses/BSD-2-Clause).

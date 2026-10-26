@@ -25,6 +25,9 @@ const (
 	errUnknownCmd = `error id=256 msg=command\snot\sfound`
 	errOK         = `error id=0 msg=ok`
 
+	// onlineClientTestNickname matches the client list response fixtures.
+	onlineClientTestNickname = "bdeb1337"
+
 	// only used for testing.
 	sshPrivateServerKey = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAaAAAABNlY2RzYS\n1zaGEyLW5pc3RwMjU2AAAACG5pc3RwMjU2AAAAQQRamQdnvjuFVMSN3wpq246IZxO9kS0y\n0f54xgj47XwyPUvhbpk27Ot6Z6CkqvLnj05pNQK6j7XJPkVoym16tiSLAAAAsOwJzensCc\n3pAAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFqZB2e+O4VUxI3f\nCmrbjohnE72RLTLR/njGCPjtfDI9S+FumTbs63pnoKSq8uePTmk1ArqPtck+RWjKbXq2JI\nsAAAAhAIVVOJZP3A2+tO26RnAXBAaD6aPpDfr1QgoeFz2Rd7E2AAAAFmZlcmRpbmFuZEBG\nZXJkaW5hbmQtUEMB\n-----END OPENSSH PRIVATE KEY-----"
 )
@@ -50,6 +53,12 @@ var commands = map[string]string{
 	"channellist":                 "cid=499 pid=0 channel_order=0 channel_name=Default\\sChannel total_clients=1 channel_needed_subscribe_power=0",
 	cmdClientList:                 `clid=42087 cid=39 client_database_id=19 client_nickname=bdeb1337 client_type=0 client_away=0 client_away_message`,
 	"clientlist -uid -away -voice -times -groups -info -icon -country -ip -badges": `clid=42087 cid=39 client_database_id=19 client_nickname=bdeb1337 client_type=0 client_away=1 client_away_message=afk client_flag_talking=0 client_input_muted=0 client_output_muted=0 client_input_hardware=1 client_output_hardware=1 client_talk_power=75 client_is_talker=0 client_is_priority_speaker=0 client_is_recording=0 client_is_channel_commander=0 client_unique_identifier=DZhdQU58qyooEK4Fr8Ly738hEmc= client_servergroups=6,8 client_channel_group_id=8 client_channel_group_inherited_channel_id=39 client_version=3.6.1\s[Build:\s1690193193] client_platform=OS\sX client_idle_time=1280228 client_created=1661793049 client_lastconnected=1691527133 client_icon_id=0 client_country=BE connection_client_ip=1.3.3.7 client_badges`,
+
+	"clientlist -away":                 `clid=42087 cid=39 client_database_id=19 client_nickname=bdeb1337 client_type=0 client_away=1 client_away_message=back\ssoon`,
+	"clientlist -voice":                `clid=42087 cid=39 client_database_id=19 client_nickname=bdeb1337 client_type=0 client_input_muted=1 client_output_muted=0`,
+	"clientlist -country":              `clid=42087 cid=39 client_database_id=19 client_nickname=bdeb1337 client_type=0 client_country`,
+	"clientlist -away -voice -country": `clid=42087 cid=39 client_database_id=19 client_nickname=bdeb1337 client_type=0 client_away=1 client_away_message=back\ssoon client_input_muted=0 client_output_muted=1 client_country=BE`,
+
 	"clientdblist": "cldbid=7 client_unique_identifier=DZhdQU58qyooEK4Fr8Ly738hEmc= client_nickname=MuhChy client_created=1259147468 client_lastconnected=1259421233",
 	"whoami":       "virtualserver_status=online virtualserver_id=18 virtualserver_unique_identifier=gNITtWtKs9+Uh3L4LKv8\\/YHsn5c= virtualserver_port=9987 client_id=94 client_channel_id=432 client_nickname=serveradmin\\sfrom\\s127.0.0.1:49725 client_database_id=1 client_login_name=serveradmin client_unique_identifier=serveradmin client_origin_server_id=0",
 	cmdQuit:        "",
