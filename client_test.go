@@ -357,9 +357,7 @@ func requireConcurrentCommands(t *testing.T, c *Client) {
 	start := make(chan struct{})
 
 	for worker := 0; worker < workers; worker++ {
-		wg.Add(1)
-		go func(worker int) {
-			defer wg.Done()
+		wg.Go(func() {
 			<-start
 
 			for i := 0; i < iterations; i++ {
@@ -373,7 +371,7 @@ func requireConcurrentCommands(t *testing.T, c *Client) {
 					successes <- result
 				}
 			}
-		}(worker)
+		})
 	}
 	close(start)
 	finished := make(chan struct{})

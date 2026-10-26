@@ -8,6 +8,8 @@ Features
 
 Installation
 ------------
+Requires Go 1.26 or later.
+
 ```sh
 go get -u github.com/multiplay/go-ts3
 ```
