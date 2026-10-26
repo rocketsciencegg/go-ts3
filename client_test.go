@@ -49,7 +49,7 @@ func TestClient(t *testing.T) {
 	_, err = c.ExecCmd(NewCmd("version"))
 	require.NoError(t, err)
 
-	_, err = c.ExecCmd(NewCmd("invalid"))
+	_, err = c.ExecCmd(NewCmd(invalidCommand))
 	require.Error(t, err)
 
 	_, err = c.ExecCmd(NewCmd("disconnect"))
@@ -75,7 +75,7 @@ func TestClientSSH(t *testing.T) {
 	_, err = c.ExecCmd(NewCmd("version"))
 	require.NoError(t, err)
 
-	_, err = c.ExecCmd(NewCmd("invalid"))
+	_, err = c.ExecCmd(NewCmd(invalidCommand))
 	require.Error(t, err)
 
 	_, err = c.ExecCmd(NewCmd("disconnect"))
@@ -317,6 +317,8 @@ func TestClientBadHeader(t *testing.T) {
 	assert.NoError(t, c.Close())
 }
 
+const invalidCommand = "invalid"
+
 func TestConcurrency(t *testing.T) {
 	setup := func(t *testing.T, serverOptions []serverOption, options ...func(*Client) error) (*Client, *server) {
 		t.Helper()
@@ -361,11 +363,11 @@ func requireConcurrentCommands(t *testing.T, c *Client) {
 			<-start
 
 			for i := 0; i < iterations; i++ {
-				cmd := []string{"version", "servergrouplist", "login", "invalid"}[(worker+i)%4]
+				cmd := []string{"version", "servergrouplist", "login", invalidCommand}[(worker+i)%4]
 				lines, err := c.Exec(cmd)
 				result := concurrentCommandResult{cmd: cmd, lines: lines, err: err}
 
-				if cmd == "invalid" {
+				if cmd == invalidCommand {
 					failures <- result
 				} else {
 					successes <- result
