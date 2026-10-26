@@ -8,7 +8,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const onlineClientTestNickname = "bdeb1337"
+const (
+	// onlineClientTestNickname matches the client list response fixtures.
+	onlineClientTestNickname = "bdeb1337"
+)
 
 func TestCmdsServer(t *testing.T) {
 	s := newServer(t)
@@ -484,11 +487,10 @@ func testClientListOptions(t *testing.T, useSSHTransport bool) {
 	t.Run("voice", func(t *testing.T) {
 		s, c, expected := setup(t)
 		defer requireClientListClosed(t, s, c)
-		falseP, trueP := false, true
 		expected.OnlineClientExt = &OnlineClientExt{
 			OnlineClientVoice: &OnlineClientVoice{
-				InputMuted:  &trueP,
-				OutputMuted: &falseP,
+				InputMuted:  new(true),
+				OutputMuted: new(false),
 			},
 		}
 		requireClientListSuccess(t, c, expected, ClientVoice)
@@ -497,26 +499,21 @@ func testClientListOptions(t *testing.T, useSSHTransport bool) {
 	t.Run("empty-country", func(t *testing.T) {
 		s, c, expected := setup(t)
 		defer requireClientListClosed(t, s, c)
-		var country string
-		expected.OnlineClientExt = &OnlineClientExt{Country: &country}
+		expected.OnlineClientExt = &OnlineClientExt{Country: new("")}
 		requireClientListSuccess(t, c, expected, ClientCountry)
 	})
 
 	t.Run("away-voice-country", func(t *testing.T) {
 		s, c, expected := setup(t)
 		defer requireClientListClosed(t, s, c)
-		var (
-			falseP, trueP = false, true
-			country       = "BE"
-		)
 		expected.Away = true
 		expected.AwayMessage = "back soon"
 		expected.OnlineClientExt = &OnlineClientExt{
 			OnlineClientVoice: &OnlineClientVoice{
-				InputMuted:  &falseP,
-				OutputMuted: &trueP,
+				InputMuted:  new(false),
+				OutputMuted: new(true),
 			},
-			Country: &country,
+			Country: new("BE"),
 		}
 		requireClientListSuccess(t, c, expected, ClientAway, ClientVoice, ClientCountry)
 	})
