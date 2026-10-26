@@ -368,7 +368,7 @@ func (s *ServerMethods) PrivilegeKeyAdd(ttype, id1, id2 int, options ...CmdArg) 
 		Token string
 	}{}
 	options = append(options, NewArg("tokentype", ttype), NewArg("tokenid1", id1), NewArg("tokenid2", id2))
-	_, err := s.ExecCmd(NewCmd("privilegekeylist").WithArgs(options...).WithResponse(&t))
+	_, err := s.ExecCmd(NewCmd("privilegekeyadd").WithArgs(options...).WithResponse(&t))
 	return t.Token, err
 }
 
